@@ -1,9 +1,13 @@
-"""Koneksi database MySQL/MariaDB (via XAMPP). Dipakai app.py & seed.py.
+"""Koneksi database MySQL/MariaDB (XAMPP lokal atau cloud seperti Aiven).
 
-Konfigurasi lewat environment (lihat .env.example). Default sesuai XAMPP:
-host 127.0.0.1:3306, user root, password kosong, database kreativa.
+Konfigurasi lewat environment (lihat .env.example):
+- Lokal XAMPP: DB_HOST=127.0.0.1, DB_USER=root, DB_PASSWORD=(kosong)
+- Cloud (Aiven, wajib SSL): set DB_SSL_CA ke path file ca.pem ATAU isi
+  sertifikatnya langsung (untuk env Vercel, dengan \n sebagai newline).
 """
 import os
+import ssl
+import tempfile
 
 import pymysql
 from pymysql.cursors import DictCursor
@@ -13,6 +17,7 @@ DB_PORT = int(os.environ.get("DB_PORT", "3306"))
 DB_USER = os.environ.get("DB_USER", "root")
 DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
 DB_NAME = os.environ.get("DB_NAME", "kreativa")
+DB_SSL_CA = os.environ.get("DB_SSL_CA", "")
 
 
 class _DB:
@@ -41,6 +46,20 @@ class _DB:
         self._conn.close()
 
 
+def _ssl_args():
+    if not DB_SSL_CA:
+        return {}
+    if os.path.isfile(DB_SSL_CA):
+        cafile = DB_SSL_CA
+    else:
+        # Isi PEM langsung (env Vercel): tulis ke file sementara
+        fd, cafile = tempfile.mkstemp(suffix="-db-ca.pem")
+        with os.fdopen(fd, "w") as f:
+            f.write(DB_SSL_CA.replace("\\n", "\n"))
+    ctx = ssl.create_default_context(cafile=cafile)
+    return {"ssl": ctx}
+
+
 def connect():
     conn = pymysql.connect(
         host=DB_HOST,
@@ -51,5 +70,6 @@ def connect():
         charset="utf8mb4",
         cursorclass=DictCursor,
         autocommit=False,
+        **_ssl_args(),
     )
     return _DB(conn)
