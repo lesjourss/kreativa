@@ -1,4 +1,4 @@
 # Duplikat dari backend/requirements.txt — Vercel membaca file ini di root repo.
 flask==3.1.3
 pyjwt==2.15.0
-pymysql==2.2.8
+pymysql==1.2.3
