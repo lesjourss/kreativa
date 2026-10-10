@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="id">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Masuk — Kreativa</title><link rel="stylesheet" href="/styles.css"></head>
+<body>
+<nav class="nav"><div class="nav-inner"><a class="logo" href="/">🎨 Kreativa<span>.</span></a><div class="links" id="navLinks"></div></div></nav>
+<div class="container" style="max-width:480px;margin-top:24px">
+  <div class="form-card">
+    <div class="tabs"><button class="tab on" id="tLogin" onclick="tab('login')">Login</button><button class="tab" id="tReg" onclick="tab('reg')">Daftar</button></div>
+    <div id="fLogin">
+      <label>Email</label><input id="lEmail" placeholder="kamu@email.com">
+      <label>Password</label><input id="lPass" type="password">
+      <button class="btn" style="margin-top:14px;width:100%" onclick="login()">Masuk</button>
+      <p class="small muted">Demo: rina@creator.id / bimo@creator.id / tania@customer.id — password: password123</p>
+    </div>
+    <div id="fReg" style="display:none">
+      <label>Nama</label><input id="rName">
+      <label>Email</label><input id="rEmail">
+      <label>Password (min 6)</label><input id="rPass" type="password">
+      <label>Role</label><select id="rRole"><option value="customer">Customer</option><option value="creator">Creator</option></select>
+      <button class="btn warn" style="margin-top:14px;width:100%" onclick="reg()">Daftar</button>
+    </div>
+    <p id="msg" class="small"></p>
+  </div>
+</div>
+<script src="/app.js"></script>
+<script>
+navbar();
+const q=new URLSearchParams(location.search); if(q.get('role')){document.querySelector('#rRole').value=q.get('role'); tab('reg');}
+function tab(x){ $('#fLogin').style.display=x==='login'?'block':'none'; $('#fReg').style.display=x==='reg'?'block':'none'; $('#tLogin').classList.toggle('on',x==='login'); $('#tReg').classList.toggle('on',x==='reg'); }
+async function login(){
+  try{ const d=await api('/api/auth/login',{method:'POST',body:{email:$('#lEmail').value,password:$('#lPass').value}});
+    localStorage.setItem('token',d.token); localStorage.setItem('user',JSON.stringify(d.user));
+    location.href = d.user.role==='creator'?'/dashboard-creator.html':'/'; }
+  catch(e){ $('#msg').textContent=e.message; }
+}
+async function reg(){
+  try{ const d=await api('/api/auth/register',{method:'POST',body:{name:$('#rName').value,email:$('#rEmail').value,password:$('#rPass').value,role:$('#rRole').value}});
+    localStorage.setItem('token',d.token); localStorage.setItem('user',JSON.stringify(d.user));
+    location.href = d.user.role==='creator'?'/dashboard-creator.html':'/'; }
+  catch(e){ $('#msg').textContent=e.message; }
+}
+</script>
+</body>
+</html>

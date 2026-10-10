@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kreativa — Marketplace Jasa Kreatif Digital</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <a class="logo" href="/">🎨 Kreativa<span>.</span></a>
+  <div class="links" id="navLinks"></div>
+</div></nav>
+<div class="container">
+  <div class="hero">
+    <h1>Semua jasa kreatif, dalam satu tempat.</h1>
+    <p>Portofolio, harga, estimasi & status order transparan — tanpa tanya-tanya via DM lagi. Untuk desainer, ilustrator, videografer, hingga copywriter.</p>
+    <div class="row" style="margin-top:14px">
+      <a class="btn warn" href="#explore">Cari Jasa</a>
+      <a class="btn ghost" href="/auth.html?role=creator">Buka Lapak Creator</a>
+    </div>
+  </div>
+
+  <h2 id="explore">Explore Jasa</h2>
+  <div class="filters">
+    <input id="q" placeholder="🔍 Cari jasa / creator...">
+    <select id="cat"><option value="">Semua kategori</option></select>
+    <select id="sort">
+      <option value="boosted">Prioritas: Boosted dulu</option>
+      <option value="newest">Terbaru</option>
+      <option value="rating">Rating tertinggi</option>
+      <option value="price_low">Harga termurah</option>
+    </select>
+    <button class="btn small" onclick="load()">Cari</button>
+  </div>
+  <div class="grid cards" id="list"></div>
+
+  <h2 style="margin-top:32px">Kenapa Kreativa?</h2>
+  <div class="grid cards">
+    <div class="card"><div class="card-body">🖼️ <b>Portofolio-first</b><br><span class="muted small">Lihat karya dulu, baru order. Visual jadi fokus utama.</span></div></div>
+    <div class="card"><div class="card-body">💰 <b>Harga transparan</b><br><span class="muted small">Paket, estimasi & jumlah revisi jelas sebelum checkout.</span></div></div>
+    <div class="card"><div class="card-body">📦 <b>Order terstruktur</b><br><span class="muted small">Brief rapi + timeline status tanpa chat manual.</span></div></div>
+    <div class="card"><div class="card-body">🚀 <b>Booster SaaS</b><br><span class="muted small">Creator bisa promosi berbayar agar mudah ditemukan.</span></div></div>
+  </div>
+</div>
+<footer>Kreativa • Tugas Digital Entrepreneurship • Marketplace + SaaS MVP</footer>
+<script src="/app.js"></script>
+<script>
+navbar();
+async function init(){
+  const cats = await api('/api/categories').catch(()=>[]);
+  cats.forEach(c=>{ const o=document.createElement('option'); o.value=c.name; o.textContent=c.name; $('#cat').appendChild(o); });
+  load();
+  $('#q').addEventListener('keydown',e=>{ if(e.key==='Enter') load(); });
+}
+async function load(){
+  const q=$('#q').value, cat=$('#cat').value, sort=$('#sort').value;
+  const params=new URLSearchParams({search:q, category:cat, sort});
+  const items=await api('/api/services?'+params).catch(e=>{ $('#list').innerHTML='<p>'+e.message+'</p>'; return []; });
+  $('#list').innerHTML = items.length ? items.map(s=>`
+    <div class="card">
+      <img class="thumb" src="${esc(s.thumbnail_url||'https://picsum.photos/seed/'+s.id+'/600/400')}" loading="lazy" onerror="this.onerror=null;this.src='https://picsum.photos/seed/kreativa-${s.id}/600/400'">
+      <div class="card-body">
+        <div class="row">${s.is_boosted?'<span class="badge boost">⚡ Promoted</span>':''}
+          <span class="badge ${s.availability_status==='open'?'open':'closed'}">${s.availability_status==='open'?'🟢 Open':'🔴 Closed'}</span></div>
+        <h3 style="margin:8px 0 4px"><a href="/store.html?service=${s.id}">${esc(s.title)}</a></h3>
+        <div class="small muted">oleh <a href="/store.html?creator=${s.creator_id}"><b>${esc(s.creator_name)}</b></a> • ${esc(s.category_name||'-')} • ⭐ ${s.avg_rating||0}</div>
+        <div class="row" style="margin-top:8px;justify-content:space-between">
+          <b>${s.price_from!=null?'Rp '+Number(s.price_from).toLocaleString('id-ID'):'Harga menyusul'}</b>
+          <a class="btn small" href="/store.html?service=${s.id}">Lihat</a>
+        </div>
+      </div>
+    </div>`).join('') : '<p>Belum ada jasa. Jadilah creator pertama!</p>';
+}
+init();
+</script>
+</body>
+</html>

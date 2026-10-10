@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="id">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Order & Status — Kreativa</title><link rel="stylesheet" href="/styles.css"></head>
+<body>
+<nav class="nav"><div class="nav-inner"><a class="logo" href="/">🎨 Kreativa<span>.</span></a><div class="links" id="navLinks"></div></div></nav>
+<div class="container" id="wrap" style="margin-top:16px"><p>Memuat...</p></div>
+<script src="/app.js"></script>
+<script>
+navbar();
+const params=new URLSearchParams(location.search);
+async function init(){
+  if(params.get('package')) return renderBrief(params.get('package'));
+  if(params.get('id')) return renderStatus(params.get('id'));
+  $('#wrap').innerHTML='<p>Parameter tidak valid.</p>';
+}
+async function renderBrief(pkgId){
+  // ambil info paket via detail service: cari di semua services (sederhana: tampilkan form langsung)
+  $('#wrap').innerHTML=`<div class="form-card" style="max-width:640px">
+    <h2>📝 Form Brief Terstruktur</h2>
+    <p class="small muted">Jelaskan kebutuhanmu serapi mungkin agar creator langsung paham.</p>
+    <label>Kebutuhan / deskripsi (min 10 karakter)</label><textarea id="need" rows="4" placeholder="Contoh: butuh logo coffeeshop modern, earth tone..."></textarea>
+    <label>Link referensi (opsional)</label><input id="ref" placeholder="https://...">
+    <label>Format output</label><input id="fmt" placeholder="PNG + AI / MP4 / JPG...">
+    <label>Deadline</label><input id="dl" type="date">
+    <label>Catatan tambahan</label><textarea id="note" rows="2"></textarea>
+    <button class="btn" style="margin-top:12px" onclick="submitOrder(${pkgId})">Kirim Order</button>
+    <p id="msg" class="small"></p></div>`;
+}
+async function submitOrder(pkgId){
+  try{
+    const d=await api('/api/orders',{method:'POST',body:{service_package_id:pkgId,need_desc:$('#need').value,reference_link:$('#ref').value,output_format:$('#fmt').value,deadline:$('#dl').value,note:$('#note').value}});
+    location.href='/order.html?id='+d.id;
+  }catch(e){ $('#msg').textContent=e.message; }
+}
+async function renderStatus(id){
+  const o=await api('/api/orders/'+id);
+  const u=currentUser();
+  $('#wrap').innerHTML=`<div class="form-card">
+    <h2>📦 Order #${o.id}</h2>${statusBadge(o.status)}${timeline(o.status)}
+    <p><b>Kebutuhan:</b> ${esc(o.need_desc)}</p>
+    <p class="small muted">Ref: ${esc(o.reference_link||'-')} • Format: ${esc(o.output_format||'-')} • Deadline: ${esc(o.deadline||'-')} • Harga: Rp ${Number(o.price_snapshot).toLocaleString('id-ID')}</p>
+    <h4>Riwayat revisi (${o.revisions.length})</h4>
+    ${o.revisions.map(r=>`<div class="small" style="border-left:3px solid var(--accent);padding:6px 10px;margin:6px 0">📎 ${esc(r.note)} <span class="muted">(${r.created_at})</span></div>`).join('')||'<p class="small muted">Belum ada revisi.</p>'}
+    <div class="row">
+      ${u&&u.id===o.customer_id&&o.status!=='selesai'?`<input id="revNote" placeholder="Catatan revisi..." style="flex:1;min-width:200px"><button class="btn small warn" onclick="sendRev(${o.id})">Minta Revisi</button>`:''}
+    </div>
+    ${o.status==='selesai'&&u&&u.id===o.customer_id&&!o.review?`
+      <h4>⭐ Beri rating</h4>
+      <div class="row"><select id="rate" style="width:120px"><option value="5">★★★★★</option><option value="4">★★★★</option><option value="3">★★★</option><option value="2">★★</option><option value="1">★</option></select>
+      <input id="comment" placeholder="Komentar..." style="flex:1"><button class="btn small" onclick="sendReview(${o.id})">Kirim</button></div>`:''}
+    ${o.review?`<p class="small">Review kamu: <span class="stars">${'★'.repeat(o.review.rating)}</span> ${esc(o.review.comment)}</p>`:''}
+    <p id="msg" class="small"></p></div>`;
+}
+async function sendRev(id){ try{ await api('/api/orders/'+id+'/revisions',{method:'POST',body:{note:$('#revNote').value}}); location.reload(); }catch(e){ $('#msg').textContent=e.message; } }
+async function sendReview(id){ try{ await api('/api/orders/'+id+'/review',{method:'POST',body:{rating:+$('#rate').value,comment:$('#comment').value}}); location.reload(); }catch(e){ $('#msg').textContent=e.message; } }
+init();
+</script>
+</body>
+</html>

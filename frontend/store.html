@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="id">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Store Creator — Kreativa</title><link rel="stylesheet" href="/styles.css"></head>
+<body>
+<nav class="nav"><div class="nav-inner"><a class="logo" href="/">🎨 Kreativa<span>.</span></a><div class="links" id="navLinks"></div></div></nav>
+<div class="container" id="wrap"><p>Memuat...</p></div>
+<footer>Kreativa • Creative Shop</footer>
+<script src="/app.js"></script>
+<script>
+navbar();
+const params = new URLSearchParams(location.search);
+async function init(){
+  let creatorId = params.get('creator'), serviceId = params.get('service');
+  let data;
+  if(serviceId){
+    const s = await api('/api/services/'+serviceId);
+    creatorId = s.creator_id;
+    data = await api('/api/creators/'+creatorId+'/store');
+    render(data, s.id);
+  } else if(creatorId){
+    data = await api('/api/creators/'+creatorId+'/store');
+    render(data, null);
+  } else { $('#wrap').innerHTML='<p>Store tidak ditemukan.</p>'; }
+}
+function render(data, highlightService){
+  const {creator, profile, services, portfolios, reviews} = data;
+  const open = (profile?.availability_status||'open')==='open';
+  $('#wrap').innerHTML = `
+    <div class="form-card" style="margin:16px 0;display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+      <img src="${esc(profile?.avatar_url||creator.avatar_url||'https://i.pravatar.cc/100')}" style="width:72px;height:72px;border-radius:50%;object-fit:cover">
+      <div>
+        <h2 style="margin:0">${esc(creator.name)} ${open?'<span class="badge open">🟢 Open for order</span>':'<span class="badge closed">🔴 Closed</span>'}</h2>
+        <div class="small muted">⭐ ${profile?.avg_rating||0} (${profile?.total_reviews||0} review) • ${services.length} jasa</div>
+        <p class="small">${esc(profile?.bio||'Belum ada bio.')}</p>
+      </div>
+    </div>
+    <h3>💼 Jasa (${services.length})</h3>
+    <div class="grid cards">${services.map(s=>`
+      <div class="card" ${s.id==highlightService?'style="outline:3px solid var(--accent)"':''}>
+        <img class="thumb" src="${esc(s.thumbnail_url||'https://picsum.photos/seed/'+s.id+'/600/400')}" onerror="this.onerror=null;this.src='https://picsum.photos/seed/kreativa-${s.id}/600/400'">
+        <div class="card-body">
+          <div class="row">${s.is_boosted?'<span class="badge boost">⚡ Promoted</span>':''}<span class="badge plan">${esc(s.category_name||'-')}</span></div>
+          <h4 style="margin:8px 0">${esc(s.title)}</h4>
+          <p class="small muted">${esc(s.description||'').slice(0,120)}</p>
+          ${s.packages.map(p=>`
+            <div class="form-card" style="margin:8px 0;padding:12px">
+              <b>${esc(p.name)}</b> — Rp ${Number(p.price).toLocaleString('id-ID')}<br>
+              <span class="small muted">⏱ ${p.estimated_days} hari • 🔁 ${p.revision_count}x revisi</span><br>
+              <button class="btn small" style="margin-top:8px" onclick="order(${p.id},${open})">Pesan paket ini</button>
+            </div>`).join('')||'<p class="small muted">Belum ada paket aktif.</p>'}
+        </div>
+      </div>`).join('')||'<p>Belum ada jasa.</p>'}
+    </div>
+    <h3>🖼️ Portofolio (${portfolios.length})</h3>
+    <div class="grid cards">${portfolios.map(p=>`
+      <div class="card"><img class="thumb" src="${esc(p.image_url)}" onerror="this.onerror=null;this.src='https://picsum.photos/seed/kreativa/600/400'"><div class="card-body"><b>${esc(p.title)}</b><br><span class="small muted">${esc(p.description||'')}</span></div></div>`).join('')||'<p class="muted">Belum ada portofolio.</p>'}
+    </div>
+    <h3>⭐ Review (${reviews.length})</h3>
+    ${reviews.map(r=>`<div class="form-card" style="margin:8px 0"><span class="stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</span> <b>${esc(r.customer_name)}</b><br><span class="small">${esc(r.comment)}</span></div>`).join('')||'<p class="muted">Belum ada review.</p>'}
+  `;
+}
+function order(packageId, open){
+  if(!open){ alert('Creator sedang Closed for order'); return; }
+  if(!currentUser()){ location.href='/auth.html'; return; }
+  location.href='/order.html?package='+packageId;
+}
+init();
+</script>
+</body>
+</html>

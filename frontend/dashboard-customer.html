@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="id">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pesanan Saya — Kreativa</title><link rel="stylesheet" href="/styles.css"></head>
+<body>
+<nav class="nav"><div class="nav-inner"><a class="logo" href="/">🎨 Kreativa<span>.</span></a><div class="links" id="navLinks"></div></div></nav>
+<div class="container" style="margin-top:16px">
+<h2>📦 Pesanan Saya</h2>
+<div id="list"></div>
+</div>
+<script src="/app.js"></script>
+<script>
+navbar(); requireAuth('customer');
+async function init(){
+  const orders=await api('/api/orders');
+  $('#list').innerHTML=orders.length?orders.map(o=>`
+    <div class="form-card" style="margin:10px 0">
+      <div class="row" style="justify-content:space-between"><b>Order #${o.id} — ${esc(o.service_title||'')}</b>${statusBadge(o.status)}</div>
+      ${timeline(o.status)}
+      <p class="small">${esc(o.need_desc)}</p>
+      <div class="row"><a class="btn small" href="/order.html?id=${o.id}">Lihat & Revisi / Review</a>
+      ${o.status==='pending'||o.status==='diterima'?`<button class="btn small ghost" onclick="cancel(${o.id})">Batalkan</button>`:''}</div>
+    </div>`).join(''):'<p>Belum ada pesanan. <a href="/">Cari jasa →</a></p>';
+}
+async function cancel(id){ if(!confirm('Batalkan order?'))return; try{ await api('/api/orders/'+id+'/status',{method:'PATCH',body:{status:'dibatalkan'}}); init(); }catch(e){ alert(e.message); } }
+init();
+</script>
+</body>
+</html>
