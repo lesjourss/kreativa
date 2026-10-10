@@ -1,3 +1,15 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/api/index.py" }]
+  "buildCommand": "pip install -r requirements.txt",
+  "devCommand": "python api/index.py",
+  "installCommand": "pip install -r requirements.txt",
+  "framework": null,
+  "regions": ["sin1"],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/api/index.py" }
+  ]
 }
