@@ -1,39 +1,58 @@
-"""Koneksi database MySQL/MariaDB (XAMPP lokal atau cloud seperti Aiven).
+"""Koneksi database PostgreSQL (Supabase) — drop-in replacement untuk db.py.
 
-Konfigurasi lewat environment (lihat .env.example):
-- Lokal XAMPP: DB_HOST=127.0.0.1, DB_USER=root, DB_PASSWORD=(kosong)
-- Cloud (Aiven, wajib SSL): set DB_SSL_CA ke path file ca.pem ATAU isi
-  sertifikatnya langsung (untuk env Vercel, dengan \n sebagai newline).
+Konfigurasi lewat environment:
+- DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME (dari Settings > Database Supabase)
+- DB_SSL_MODE = require (default Supabase)
 """
 import os
 import ssl
 import tempfile
 
-import pymysql
-from pymysql.cursors import DictCursor
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from psycopg2.pool import SimpleConnectionPool
 
-DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
-DB_PORT = int(os.environ.get("DB_PORT", "3306"))
-DB_USER = os.environ.get("DB_USER", "root")
+DB_HOST = os.environ.get("DB_HOST", "localhost")
+DB_PORT = int(os.environ.get("DB_PORT", "5432"))
+DB_USER = os.environ.get("DB_USER", "postgres")
 DB_PASSWORD = os.environ.get("DB_PASSWORD", "")
-DB_NAME = os.environ.get("DB_NAME", "kreativa")
-DB_SSL_CA = os.environ.get("DB_SSL_CA", "")
+DB_NAME = os.environ.get("DB_NAME", "postgres")
+DB_SSL_MODE = os.environ.get("DB_SSL_MODE", "require")
+
+_pool: SimpleConnectionPool | None = None
 
 
-class _DB:
-    """Wrapper tipis agar pemakaian mirip sqlite3: db.execute() -> cursor."""
+def _get_pool():
+    global _pool
+    if _pool is None:
+        _pool = SimpleConnectionPool(
+            1, 5,
+            host=DB_HOST, port=DB_PORT,
+            user=DB_USER, password=DB_PASSWORD,
+            dbname=DB_NAME,
+            sslmode=DB_SSL_MODE,
+        )
+    return _pool
+
+
+class _PGWrapper:
+    """Wrapper agar API mirip pymysql: conn.execute(sql, params) -> cursor."""
 
     def __init__(self, conn):
         self._conn = conn
 
     def execute(self, sql, params=None):
-        cur = self._conn.cursor()
-        cur.execute(sql, params or ())
+        cur = self._conn.cursor(cursor_factory=RealDictCursor)
+        # psycopg2 pakai %s, bukan ? — konversi otomatis
+        if params is not None:
+            cur.execute(sql.replace("?", "%s"), params)
+        else:
+            cur.execute(sql)
         return cur
 
     def executemany(self, sql, seq):
-        cur = self._conn.cursor()
-        cur.executemany(sql, seq)
+        cur = self._conn.cursor(cursor_factory=RealDictCursor)
+        cur.executemany(sql.replace("?", "%s"), seq)
         return cur
 
     def commit(self):
@@ -43,33 +62,11 @@ class _DB:
         self._conn.rollback()
 
     def close(self):
-        self._conn.close()
-
-
-def _ssl_args():
-    if not DB_SSL_CA:
-        return {}
-    if os.path.isfile(DB_SSL_CA):
-        cafile = DB_SSL_CA
-    else:
-        # Isi PEM langsung (env Vercel): tulis ke file sementara
-        fd, cafile = tempfile.mkstemp(suffix="-db-ca.pem")
-        with os.fdopen(fd, "w") as f:
-            f.write(DB_SSL_CA.replace("\\n", "\n"))
-    ctx = ssl.create_default_context(cafile=cafile)
-    return {"ssl": ctx}
+        _get_pool().putconn(self._conn)
 
 
 def connect():
-    conn = pymysql.connect(
-        host=DB_HOST,
-        port=DB_PORT,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        database=DB_NAME,
-        charset="utf8mb4",
-        cursorclass=DictCursor,
-        autocommit=False,
-        **_ssl_args(),
-    )
-    return _DB(conn)
+    pool = _get_pool()
+    conn = pool.getconn()
+    conn.autocommit = False
+    return _PGWrapper(conn)

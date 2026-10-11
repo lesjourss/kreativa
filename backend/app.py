@@ -54,20 +54,10 @@ def close_db(exc=None):
 
 
 def init_db():
-    schema_path = os.path.join(BASE_DIR, "schema_mysql.sql")
+    # Supabase: schema dijalankan manual di SQL Editor (schema_supabase.sql).
+    # Di sini cukup seed data master (kategori, booster plans).
     db = mysql_connect()
     try:
-        with open(schema_path, encoding="utf-8") as f:
-            # pymysql tidak mendukung multi-statement: eksekusi per statement
-            statements = [s.strip() for s in f.read().split(";") if s.strip()]
-        cur = db.execute("SELECT 1")
-        for stmt in statements:
-            if stmt.startswith("--"):
-                lines = [ln for ln in stmt.splitlines() if not ln.strip().startswith("--")]
-                stmt = "\n".join(lines).strip()
-                if not stmt:
-                    continue
-            db.execute(stmt)
         # seed kategori + paket booster bila kosong
         if db.execute("SELECT COUNT(*) AS c FROM service_categories").fetchone()["c"] == 0:
             cats = ["Desain Grafis", "Ilustrasi & Fan Art", "Fotografi", "Videografi",
