@@ -1,9 +1,8 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
+# Root project = satu level di atas folder "api"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "backend"))
 
 from app import app  # noqa: E402
-
-# Catatan: init_db() TIDAK dijalankan di sini. Buat tabel di database cloud
-# dengan menjalankan seed dari laptop: DB_HOST=... DB_USER=... python backend/seed.py
