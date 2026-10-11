@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS service_packages (
   price INT NOT NULL CHECK (price >= 0),
   estimated_days INT NOT NULL DEFAULT 3 CHECK (estimated_days >= 1),
   revision_count INT NOT NULL DEFAULT 1 CHECK (revision_count >= 0),
-  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  is_active SMALLINT NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

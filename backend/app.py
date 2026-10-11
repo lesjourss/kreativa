@@ -1,5 +1,5 @@
 """Backend Flask — Platform Jasa Kreatif Digital (Marketplace + SaaS MVP).
-Covers TASKS.md Epic 1-7. Database MySQL/MariaDB via XAMPP (lihat backend/db.py).
+Covers TASKS.md Epic 1-7. Database PostgreSQL (Supabase), lihat backend/db.py.
 Validasi di backend.
 """
 import os
@@ -265,10 +265,10 @@ def list_services():
            WHERE 1=1"""
     params = []
     if category:
-        q += " AND (c.name = %s OR CAST(c.id AS CHAR) = %s)"
+        q += " AND (c.name = %s OR CAST(c.id AS TEXT) = %s)"
         params += [category, category]
     if search:
-        q += " AND (s.title LIKE %s OR s.description LIKE %s OR u.name LIKE %s)"
+        q += " AND (s.title ILIKE %s OR s.description ILIKE %s OR u.name ILIKE %s)"
         like = f"%{search}%"
         params += [like, like, like]
     rows = db.execute(q, params).fetchall()
