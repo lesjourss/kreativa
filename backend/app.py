@@ -958,7 +958,7 @@ def serve_index():
 @app.get("/<path:filename>")
 def serve_static(filename):
     if filename.startswith("api/"):
-        return jsonify({"error": "Not found"}), 404
+        return jsonify({"error": "Not found", "path": filename}), 404
     full = os.path.join(FRONTEND_DIR, filename)
     if os.path.isfile(full):
         return send_from_directory(FRONTEND_DIR, filename)
