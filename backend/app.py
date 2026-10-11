@@ -3,6 +3,8 @@ Covers TASKS.md Epic 1-7. Database PostgreSQL (Supabase), lihat backend/db.py.
 Validasi di backend.
 """
 import os
+import urllib.error
+import urllib.request
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -23,6 +25,13 @@ FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 ALLOWED_IMG_EXT = {"jpg", "jpeg", "png", "webp", "gif"}
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+CONTENT_TYPES = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+                 "webp": "image/webp", "gif": "image/gif"}
+
+# Supabase Storage (dipakai di Vercel, karena filesystem Vercel tidak permanen)
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+SUPABASE_BUCKET = os.environ.get("SUPABASE_BUCKET", "uploads")
 
 app = Flask(__name__)
 
@@ -937,10 +946,32 @@ def upload_image():
         return jsonify({"error": "File kosong"}), 400
     if len(data) > MAX_UPLOAD_BYTES:
         return jsonify({"error": "Ukuran maksimal 5MB"}), 400
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
     fname = f"{uuid.uuid4().hex}.{ext}"
-    with open(os.path.join(UPLOAD_DIR, fname), "wb") as out:
-        out.write(data)
+
+    # Mode cloud: simpan ke Supabase Storage (bucket public)
+    if SUPABASE_URL and SUPABASE_SERVICE_KEY:
+        headers = {"apikey": SUPABASE_SERVICE_KEY, "Content-Type": CONTENT_TYPES[ext]}
+        if not SUPABASE_SERVICE_KEY.startswith("sb_"):  # key lama berbentuk JWT
+            headers["Authorization"] = f"Bearer {SUPABASE_SERVICE_KEY}"
+        req = urllib.request.Request(
+            f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{fname}",
+            data=data, method="POST", headers=headers,
+        )
+        try:
+            urllib.request.urlopen(req, timeout=20).read()
+        except urllib.error.HTTPError as e:
+            return jsonify({"error": f"Storage menolak upload ({e.code})"}), 502
+        except Exception:
+            return jsonify({"error": "Gagal menghubungi storage"}), 502
+        return jsonify({"url": f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{fname}"}), 201
+
+    # Mode lokal (laptop): simpan ke folder uploads
+    try:
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        with open(os.path.join(UPLOAD_DIR, fname), "wb") as out:
+            out.write(data)
+    except OSError:
+        return jsonify({"error": "Storage belum dikonfigurasi (SUPABASE_URL / SUPABASE_SERVICE_KEY)"}), 503
     return jsonify({"url": f"/uploads/{fname}"}), 201
 
 
