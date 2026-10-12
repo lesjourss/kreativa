@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dashboard Admin — Kreativa</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<nav class="nav"><div class="nav-inner"><a class="logo" href="/">🎨 Admin Kreativa</a><div class="links" id="navLinks"></div></div></nav>
+<div class="container" style="margin-top:16px">
+  <h2>⚙️ Panel Admin — Verifikasi Pembayaran</h2>
+  
+  <!-- Form Set QRIS Admin -->
+  <div class="form-card">
+    <h3>📱 Pengaturan QRIS Admin</h3>
+    <label>Upload Gambar QRIS Toko</label>
+    <div class="row">
+      <input type="file" id="qrisFile" accept=".jpg,.jpeg,.png" style="flex:1" onchange="pickUpload('qrisFile','qrisUrl','qrisMsg')">
+      <span class="small muted" id="qrisMsg"></span>
+    </div>
+    <input id="qrisUrl" placeholder="URL QRIS" style="margin-top:6px">
+    <img id="qrisUrlPrev" class="prev" style="max-width:180px;display:none;margin-top:6px">
+    <button class="btn small" style="margin-top:8px" onclick="guard(this,saveQris)">💾 Simpan QRIS</button>
+  </div>
+
+  <!-- Daftar Pembayaran Customer -->
+  <h3 style="margin-top:20px">📥 Verifikasi Bukti Pembayaran</h3>
+  <div id="paymentList"><p>Memuat...</p></div>
+</div>
+
+<script src="/app.js"></script>
+<script>
+requireAuth('admin'); navbar();
+
+async function init() {
+  const qRes = await api('/api/qris');
+  if(qRes.qris_image_url) {
+    $('#qrisUrl').value = qRes.qris_image_url;
+    $('#qrisUrlPrev').src = qRes.qris_image_url;
+    $('#qrisUrlPrev').style.display = 'block';
+  }
+  loadPayments();
+}
+
+async function saveQris() {
+  const url = $('#qrisUrl').value.trim();
+  if(!url) throw new Error('Upload gambar QRIS dulu');
+  await api('/api/admin/qris', {method:'POST', body:{qris_image_url: url}});
+  alert('QRIS Admin berhasil diperbarui!');
+}
+
+async function loadPayments() {
+  const list = await api('/api/admin/payments');
+  $('#paymentList').innerHTML = list.length ? list.map(p => `
+    <div class="form-card" style="margin:10px 0">
+      <div class="row" style="justify-content:space-between">
+        <b>Order #${p.id} • ${esc(p.customer_name)} $\rightarrow$ ${esc(p.creator_name)}</b>
+        ${payStatusBadge(p.payment_status)}
+      </div>
+      <p class="small">Total Pembayaran: <b>${rupiah(p.price_snapshot)}</b></p>
+      
+      ${p.payment_proof_url ? `
+        <div style="margin:10px 0;background:#eee;padding:10px;border-radius:6px">
+          <p class="small"><b>Bukti Transfer Customer (JPG/PNG):</b></p>
+          <a href="${esc(p.payment_proof_url)}" target="_blank">
+            <img src="${esc(p.payment_proof_url)}" style="max-width:250px;border:1px solid #ccc;border-radius:4px;display:block">
+          </a>
+        </div>
+      ` : '<p class="small muted">Customer belum mengunggah bukti bayar.</p>'}
+
+      ${p.payment_status === 'verifying' ? `
+        <div class="row">
+          <button class="btn small" onclick="guard(this,()=>verify(${p.id},'approve'))">✅ Cocok / Verifikasi (Lunas)</button>
+          <button class="btn small warn" onclick="guard(this,()=>verify(${p.id},'reject'))">❌ Tidak Cocok / Tolak</button>
+        </div>
+      ` : ''}
+    </div>
+  `).join('') : '<p class="muted">Belum ada transaksi.</p>';
+}
+
+async function verify(oid, action) {
+  await api(`/api/admin/orders/${oid}/verify-payment`, {method:'PATCH', body:{action}});
+  loadPayments();
+}
+
+init();
+</script>
+</body>
+</html>
