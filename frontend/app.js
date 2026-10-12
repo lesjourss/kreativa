@@ -120,7 +120,7 @@ async function openStore(){
 }
 
 // Subnav Creator
-const CREATOR_MENU=[['orders','📥 Pesanan'],['jasa','💼 Jasa & Paket'],['portofolio','🖼️ Portofolio'],['booster','🚀 Booster'],['profil','👤 Profil Toko']];
+const CREATOR_MENU=[['orders','Pesanan'],['jasa','Layanan & Paket'],['portofolio','Portofolio'],['booster','Booster'],['profil','Profil Toko']];
 
 function markSubnav(){
   const k = location.hash.slice(1) || 'orders';
@@ -145,10 +145,10 @@ function navbar(){
     <a href="/" class="small">Explore</a>
     <a href="/creators.html" class="small">Cari Creator</a>
     ${u && u.role === 'customer' ? '<a href="/dashboard-customer.html" class="small">Pesanan Saya</a>' : ''}
-    ${u && u.role === 'admin' ? '<a href="/dashboard-admin.html" class="small">⚙️ Admin</a>' : ''}
-    ${u ? `<a href="/account.html" class="small">👤 ${esc(u.name)}</a>` : ''}
-    ${u && u.role === 'customer' ? '<button class="btn small warn" onclick="openStore()">Buka Lapak</button>' : ''}
-    ${u ? '<button class="btn small ghost" onclick="logout()">Logout</button>' : '<a href="/auth.html" class="btn small" style="background:#7c3aed;color:#fff;padding:6px 14px;border-radius:6px;text-decoration:none;font-weight:600;">Masuk / Daftar</a>'}
+    ${u && u.role === 'admin' ? '<a href="/dashboard-admin.html" class="small">Admin</a>' : ''}
+    ${u ? `<a href="/account.html" class="small">${esc(u.name)}</a>` : ''}
+    ${u && u.role === 'customer' ? '<button class="btn small ghost" onclick="openStore()">Buka Lapak</button>' : ''}
+    ${u ? '<button class="btn small ghost" onclick="logout()">Logout</button>' : '<a href="/auth.html" class="btn small">Masuk / Daftar</a>'}
   `;
     
   if(u && u.role==='creator' && !$('.subnav')){
@@ -156,7 +156,7 @@ function navbar(){
     if(nav){
       nav.insertAdjacentHTML('afterend', `<div class="subnav"><div class="subnav-inner">
         ${CREATOR_MENU.map(([k,l])=>`<a data-k="${k}" href="/dashboard-creator.html#${k}">${l}</a>`).join('')}
-        <a href="/store.html?creator=${u.id}">🏪 Lihat Toko</a></div></div>`);
+        <a href="/store.html?creator=${u.id}">Lihat Toko</a></div></div>`);
       markSubnav();
     }
   }
@@ -164,27 +164,28 @@ function navbar(){
 window.addEventListener('hashchange', markSubnav);
 
 // Status Badge Helpers
-const STATUS_LABEL={pending:'⏳ Menunggu creator',diterima:'✅ Diterima',dikerjakan:'🛠️ Dikerjakan',revisi:'🔁 Revisi',dikirim:'📤 Hasil dikirim',selesai:'🎉 Selesai',ditolak:'⛔ Ditolak',dibatalkan:'🚫 Dibatalkan'};
+const STATUS_LABEL={pending:'Menunggu',diterima:'Diterima',dikerjakan:'Dikerjakan',revisi:'Revisi',dikirim:'Hasil Dikirim',selesai:'Selesai',ditolak:'Ditolak',dibatalkan:'Dibatalkan'};
 function statusBadge(s){
-  return `<span class="badge ${s==='selesai'?'open':(s==='ditolak'||s==='dibatalkan')?'closed':s==='dikirim'?'boost':'plan'}">${STATUS_LABEL[s]||s}</span>`;
+  const cls = s==='selesai'?'open':(s==='ditolak'||s==='dibatalkan')?'closed':s==='dikirim'?'boost':'plan';
+  return `<span class="badge ${cls}"><span class="badge-dot" style="background:currentColor"></span>${STATUS_LABEL[s]||s}</span>`;
 }
 
 const PAY_STATUS_LABEL = {
-  unpaid: '🔴 Belum Bayar',
-  verifying: '🟡 Menunggu Verifikasi Admin',
-  paid: '🟢 Lunas',
-  rejected: '❌ Pembayaran Ditolak'
+  unpaid: 'Belum Bayar',
+  verifying: 'Verifikasi Admin',
+  paid: 'Lunas',
+  rejected: 'Ditolak'
 };
 
 function payStatusBadge(s) {
   const cls = s === 'paid' ? 'open' : (s === 'verifying' ? 'boost' : 'closed');
-  return `<span class="badge ${cls}">${PAY_STATUS_LABEL[s] || s}</span>`;
+  return `<span class="badge ${cls}"><span class="badge-dot" style="background:currentColor"></span>${PAY_STATUS_LABEL[s] || s}</span>`;
 }
 
 function timeline(cur){
-  const steps=[['pending','Menunggu'],['diterima','Diterima'],['dikerjakan','Dikerjakan'],['dikirim','Hasil dikirim'],['selesai','Selesai']];
+  const steps=[['pending','Menunggu'],['diterima','Diterima'],['dikerjakan','Dikerjakan'],['dikirim','Hasil Dikirim'],['selesai','Selesai']];
   const idx = cur==='revisi' ? 2 : steps.findIndex(s=>s[0]===cur);
-  return `<div class="timeline">${steps.map(([k,l],i)=>`<span class="step ${i<=idx?'on':''}">${l}</span>`).join('')}${cur==='revisi'?'<span class="step on">🔁 sedang revisi</span>':''}</div>`;
+  return `<div class="timeline">${steps.map(([k,l],i)=>`<span class="step ${i<=idx?'on':''}">${l}</span>`).join('')}${cur==='revisi'?'<span class="step on">Sedang Revisi</span>':''}</div>`;
 }
 
 // Inisialisasi otomatis saat dokumen siap

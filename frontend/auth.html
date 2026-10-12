@@ -3,84 +3,84 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Masuk / Daftar — Kreativa</title>
+  <title>Masuk / Daftar &mdash; Kreativa</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
 
 <nav class="nav">
   <div class="nav-inner">
-    <a class="logo" href="/">🎨 Kreativa<span>.</span></a>
+    <a class="logo" href="/">Kreativa<span></span></a>
     <div class="links" id="navLinks"></div>
   </div>
 </nav>
 
-<div class="container" style="max-width:420px;margin-top:40px">
-  <div class="form-card">
-    <div class="row" style="gap:8px;margin-bottom:20px;justify-content:center">
-      <button id="tabLogin" class="btn small" onclick="switchTab('login')">Login</button>
-      <button id="tabRegister" class="btn small ghost" onclick="switchTab('register')">Daftar</button>
+<div class="container" style="max-width:400px;margin-top:48px">
+  <div class="form-card" style="box-shadow:var(--shadow-md)">
+    <div class="row" style="gap:8px;margin-bottom:24px;justify-content:center;background:var(--border-light);padding:4px;border-radius:var(--radius-sm)">
+      <button id="tabLogin" class="tab on" style="flex:1;border:0;padding:8px 0;margin:0" onclick="switchTab('login')">Masuk</button>
+      <button id="tabRegister" class="tab" style="flex:1;border:0;padding:8px 0;margin:0" onclick="switchTab('register')">Daftar</button>
     </div>
 
     <!-- Form Login -->
     <form id="formLogin" onsubmit="handleLogin(event)">
-      <div style="margin-bottom:12px">
-        <label class="small" style="display:block;margin-bottom:4px">Email</label>
-        <input type="email" id="loginEmail" placeholder="kamu@email.com" required style="width:100%">
+      <div style="margin-bottom:14px">
+        <label style="margin:0 0 6px">Alamat Email</label>
+        <input type="email" id="loginEmail" placeholder="nama@email.com" required>
       </div>
       <div style="margin-bottom:20px">
-        <label class="small" style="display:block;margin-bottom:4px">Password</label>
-        <input type="password" id="loginPassword" placeholder="••••••••" required style="width:100%">
+        <label style="margin:0 0 6px">Kata Sandi</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" required>
       </div>
-      <button type="submit" id="btnLogin" class="btn" style="width:100%;background:#7c3aed;color:#fff">Masuk</button>
+      <button type="submit" id="btnLogin" class="btn" style="width:100%">Masuk ke Akun</button>
     </form>
 
     <!-- Form Register -->
     <form id="formRegister" onsubmit="handleRegister(event)" style="display:none">
       <div style="margin-bottom:12px">
-        <label class="small" style="display:block;margin-bottom:4px">Nama Lengkap</label>
-        <input type="text" id="regName" placeholder="Nama kamu" required style="width:100%">
+        <label style="margin:0 0 6px">Nama Lengkap</label>
+        <input type="text" id="regName" placeholder="Nama lengkap kamu" required>
       </div>
       <div style="margin-bottom:12px">
-        <label class="small" style="display:block;margin-bottom:4px">Email</label>
-        <input type="email" id="regEmail" placeholder="kamu@email.com" required style="width:100%">
+        <label style="margin:0 0 6px">Alamat Email</label>
+        <input type="email" id="regEmail" placeholder="nama@email.com" required>
       </div>
       <div style="margin-bottom:12px">
-        <label class="small" style="display:block;margin-bottom:4px">Password</label>
-        <input type="password" id="regPassword" placeholder="••••••••" required style="width:100%">
+        <label style="margin:0 0 6px">Kata Sandi (minimal 6 karakter)</label>
+        <input type="password" id="regPassword" placeholder="••••••••" required>
       </div>
       <div style="margin-bottom:20px">
-        <label class="small" style="display:block;margin-bottom:4px">Daftar Sebagai</label>
-        <select id="regRole" style="width:100%">
-          <option value="customer">Customer (Pembeli Jasa)</option>
-          <option value="creator">Creator (Penyedia Jasa)</option>
+        <label style="margin:0 0 6px">Tipe Akun</label>
+        <select id="regRole">
+          <option value="customer">Customer (Pencari & Pemesan Jasa)</option>
+          <option value="creator">Creator (Penyedia Jasa Kreatif)</option>
         </select>
       </div>
-      <button type="submit" id="btnRegister" class="btn" style="width:100%;background:#7c3aed;color:#fff">Daftar Akun</button>
+      <button type="submit" id="btnRegister" class="btn" style="width:100%">Daftar Akun Baru</button>
     </form>
   </div>
 </div>
 
+<footer>
+  Kreativa &copy; 2026 &bull; Platform Jasa Kreatif Digital
+</footer>
+
 <script src="/app.js"></script>
 <script>
-// Pindah Tab Login / Daftar
 function switchTab(mode) {
   if (mode === 'login') {
     $('#formLogin').style.display = 'block';
     $('#formRegister').style.display = 'none';
-    $('#tabLogin').className = 'btn small';
-    $('#tabLogin').style.background = '';
-    $('#tabRegister').className = 'btn small ghost';
+    $('#tabLogin').className = 'tab on';
+    $('#tabRegister').className = 'tab';
   } else {
     $('#formLogin').style.display = 'none';
     $('#formRegister').style.display = 'block';
-    $('#tabLogin').className = 'btn small ghost';
-    $('#tabRegister').className = 'btn small';
-    $('#tabRegister').style.background = '';
+    $('#tabLogin').className = 'tab';
+    $('#tabRegister').className = 'tab on';
   }
 }
 
-// Proses Login
 async function handleLogin(e) {
   e.preventDefault();
   const btn = $('#btnLogin');
@@ -102,7 +102,6 @@ async function handleLogin(e) {
   });
 }
 
-// Proses Register
 async function handleRegister(e) {
   e.preventDefault();
   const btn = $('#btnRegister');
@@ -125,7 +124,6 @@ async function handleRegister(e) {
   });
 }
 
-// Redirect jika sudah login
 document.addEventListener('DOMContentLoaded', () => {
   if (currentUser()) {
     location.href = '/';
