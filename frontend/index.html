@@ -1,84 +1,112 @@
 <!doctype html>
 <html lang="id">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Kreativa — Marketplace Jasa Kreatif Digital</title>
-<link rel="stylesheet" href="/styles.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Kreativa — Marketplace Jasa Kreatif Digital</title>
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-<nav class="nav"><div class="nav-inner">
-  <a class="logo" href="/">🎨 Kreativa<span>.</span></a>
-  <div class="links" id="navLinks"></div>
-</div></nav>
-<div class="container">
-  <div class="hero">
-    <h1>Semua jasa kreatif, dalam satu tempat.</h1>
-    <p>Portofolio, harga, estimasi & status order transparan — tanpa tanya-tanya via DM lagi. Untuk desainer, ilustrator, videografer, hingga copywriter.</p>
-    <div class="row" style="margin-top:14px">
-      <a class="btn warn" href="#explore">Cari Jasa</a>
-      <a class="btn ghost" href="/creators.html">Cari Creator</a>
-      <button class="btn ghost" onclick="joinCreator()">Buka Lapak Creator</button>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="logo" href="/">🎨 Kreativa<span>.</span></a>
+    <div class="links" id="navLinks">
+      <a href="/" class="small">Explore</a>
+      <a href="/creators.html" class="small">Cari Creator</a>
+      <a href="/auth.html" class="btn small">Masuk / Daftar</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container" style="margin-top:16px">
+  <div class="hero" style="background:linear-gradient(135deg,#7c3aed,#f97316);color:#fff;padding:32px;border-radius:12px;margin-bottom:20px">
+    <h1 style="margin:0 0 10px 0;font-size:28px">Semua jasa kreatif, dalam satu tempat.</h1>
+    <p style="margin:0 0 16px 0;opacity:0.9">Portofolio, harga, estimasi & status order transparan — tanpa tanya-tanya via DM lagi. Untuk desainer, ilustrator, videografer, hingga copywriter.</p>
+    <div class="row" style="gap:8px">
+      <a class="btn" style="background:#fff;color:#7c3aed" href="#explore">Cari Jasa</a>
+      <a class="btn ghost" style="color:#fff;border-color:#fff" href="/creators.html">Cari Creator</a>
+      <button class="btn warn" onclick="openStore()">Buka Lapak Creator</button>
     </div>
   </div>
 
-  <h2 id="explore">Explore Jasa</h2>
-  <div class="filters">
-    <input id="q" placeholder="🔍 Cari jasa / creator..." oninput="debounce()">
-    <select id="cat" onchange="load()"><option value="">Semua kategori</option></select>
-    <select id="sort" onchange="load()">
-      <option value="boosted">Prioritas: Boosted dulu</option>
-      <option value="newest">Terbaru</option>
-      <option value="rating">Rating tertinggi</option>
-      <option value="price_low">Harga termurah</option>
-    </select>
-    <label class="chk"><input type="checkbox" id="openOnly" onchange="load()"> Open saja</label>
-    <button class="btn small" onclick="load()">Cari</button>
+  <h3 id="explore">Explore Jasa</h3>
+  <div class="form-card" style="margin-bottom:16px">
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <input id="qSearch" placeholder="🔍 Cari jasa / creator..." style="flex:2;min-width:180px">
+      <select id="qCat" style="flex:1;min-width:140px"><option value="">Semua kategori</option></select>
+      <select id="qSort" style="flex:1;min-width:140px">
+        <option value="boosted">Prioritas: Boosted dulu</option>
+        <option value="rating">Rating tertinggi</option>
+        <option value="price_low">Harga terendah</option>
+        <option value="price_high">Harga tertinggi</option>
+        <option value="newest">Terbaru</option>
+      </select>
+      <label class="row small"><input type="checkbox" id="qOpen"> Open saja</label>
+      <button class="btn small" onclick="loadServices()">Cari</button>
+    </div>
   </div>
-  <p class="small muted" id="count"></p>
-  <div class="grid cards" id="list"></div>
 
-  <h2 style="margin-top:32px">Kenapa Kreativa?</h2>
-  <div class="grid cards">
-    <div class="card"><div class="card-body">🖼️ <b>Portofolio-first</b><br><span class="muted small">Lihat karya dulu, baru order. Visual jadi fokus utama.</span></div></div>
-    <div class="card"><div class="card-body">💰 <b>Harga transparan</b><br><span class="muted small">Paket, estimasi & jumlah revisi jelas sebelum checkout.</span></div></div>
-    <div class="card"><div class="card-body">📦 <b>Order terstruktur</b><br><span class="muted small">Brief rapi + timeline status tanpa chat manual.</span></div></div>
-    <div class="card"><div class="card-body">🚀 <b>Booster SaaS</b><br><span class="muted small">Creator bisa promosi berbayar agar mudah ditemukan.</span></div></div>
+  <div id="serviceList" class="grid cards"><p>Memuat jasa...</p></div>
+
+  <h3 style="margin-top:30px">Kenapa Kreativa?</h3>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+    <div class="form-card">🖼️ <b>Portofolio-first</b><br><span class="small muted">Lihat karya dulu, baru order. Visual jadi fokus utama.</span></div>
+    <div class="form-card">💰 <b>Harga transparan</b><br><span class="small muted">Paket, estimasi & jumlah revisi jelas sebelum checkout.</span></div>
+    <div class="form-card">📦 <b>Order terstruktur</b><br><span class="small muted">Brief rapi + timeline status tanpa chat manual.</span></div>
+    <div class="form-card">🚀 <b>Booster SaaS</b><br><span class="small muted">Creator bisa promosi berbayar agar mudah ditemukan.</span></div>
   </div>
 </div>
-<footer>Kreativa • Tugas Digital Entrepreneurship • Marketplace + SaaS MVP</footer>
+
 <script src="/app.js"></script>
 <script>
+// Panggil fungsi navbar otomatis saat halaman dimuat
 navbar();
-async function init(){
+
+async function init() {
   const cats = await api('/api/categories').catch(()=>[]);
-  cats.forEach(c=>{ const o=document.createElement('option'); o.value=c.name; o.textContent=c.name; $('#cat').appendChild(o); });
-  load();
-  $('#q').addEventListener('keydown',e=>{ if(e.key==='Enter') load(); });
+  const sel = $('#qCat');
+  cats.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.name;
+    sel.appendChild(opt);
+  });
+  loadServices();
 }
-let tm, seq=0;
-function debounce(){ clearTimeout(tm); tm=setTimeout(load,350); }
-function joinCreator(){ const u=currentUser(); if(!u) location.href='/auth.html?role=creator'; else if(u.role==='customer') openStore(); else location.href='/dashboard-creator.html#orders'; }
-async function load(){
-  const my=++seq;   // abaikan respons lama kalau ada pencarian yang lebih baru
-  const params=new URLSearchParams({search:$('#q').value.trim(), category:$('#cat').value, sort:$('#sort').value, open_only:$('#openOnly').checked?'1':''});
-  const items=await api('/api/services?'+params).catch(e=>{ $('#list').innerHTML='<p>'+esc(e.message)+'</p>'; return null; });
-  if(my!==seq || !items) return;
-  $('#count').textContent=items.length+' jasa ditemukan';
-  $('#list').innerHTML = items.length ? items.map(s=>`
+
+async function loadServices() {
+  const q = $('#qSearch').value.trim();
+  const cat = $('#qCat').value;
+  const sort = $('#qSort').value;
+  const open = $('#qOpen').checked;
+  const list = await api(`/api/services?search=${encodeURIComponent(q)}&category=${cat}&sort=${sort}&open_only=${open}`).catch(()=>[]);
+  
+  const el = $('#serviceList');
+  if(!list.length) {
+    el.innerHTML = '<p class="muted">Belum ada jasa yang sesuai.</p>';
+    return;
+  }
+  
+  el.innerHTML = list.map(s => `
     <div class="card">
-      <img class="thumb" src="${esc(s.thumbnail_url||'https://picsum.photos/seed/'+s.id+'/600/400')}" loading="lazy" onerror="this.onerror=null;this.src='https://picsum.photos/seed/kreativa-${s.id}/600/400'">
+      ${s.thumbnail_url ? `<img class="thumb" src="${esc(s.thumbnail_url)}">` : '<div class="thumb" style="background:#eee;display:flex;align-items:center;justify-content:center;color:#888">Tanpa Sampul</div>'}
       <div class="card-body">
-        <div class="row">${s.is_boosted?'<span class="badge boost">⚡ Promoted</span>':''}
-          <span class="badge ${s.availability_status==='open'?'open':'closed'}">${s.availability_status==='open'?'🟢 Open':'🔴 Closed'}</span></div>
-        <h3 style="margin:8px 0 4px"><a href="/store.html?service=${s.id}">${esc(s.title)}</a></h3>
-        <div class="small muted">oleh <a href="/store.html?creator=${s.creator_id}"><b>${esc(s.creator_name)}</b></a> • ${esc(s.category_name||'-')} • ⭐ ${s.avg_rating||0}</div>
-        <div class="row" style="margin-top:8px;justify-content:space-between">
-          <b>${s.price_from!=null?'Rp '+Number(s.price_from).toLocaleString('id-ID'):'Harga menyusul'}</b>
-          <a class="btn small" href="/store.html?service=${s.id}">Lihat</a>
+        <div class="row" style="justify-content:space-between">
+          <span class="badge plan">${esc(s.category_name||'Umum')}</span>
+          ${s.is_boosted ? '<span class="badge boost">⚡ Promoted</span>' : ''}
+        </div>
+        <b style="display:block;margin:6px 0">${esc(s.title)}</b>
+        <p class="small muted">${esc(s.description).slice(0, 80)}...</p>
+        <div class="row" style="justify-content:space-between;margin-top:8px">
+          <span class="small"><b>${s.price_from ? rupiah(s.price_from) : 'Lihat Paket'}</b></span>
+          <a class="btn small" href="/store.html?creator=${s.creator_id}">Lihat Detail</a>
         </div>
       </div>
-    </div>`).join('') : '<p>Belum ada jasa. Jadilah creator pertama!</p>';
+    </div>
+  `).join('');
 }
+
 init();
 </script>
 </body>
