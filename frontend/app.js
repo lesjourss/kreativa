@@ -1,9 +1,12 @@
-// Helpers global
+// ==========================================
+// KREATIVA - HELPER & UTILS GLOBAL
+// ==========================================
 const $ = (s, el=document) => el.querySelector(s); const $$ = (s, el=document) => [...el.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rupiah = (n) => 'Rp ' + Number(n||0).toLocaleString('id-ID');
 const fmtDate = (s) => String(s||'').slice(0,16);
 
+// Client API Helper
 async function api(path, {method='GET', body, token}={}) {
   const t = token || localStorage.getItem('token');
   const res = await fetch(path, {
@@ -12,7 +15,7 @@ async function api(path, {method='GET', body, token}={}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(()=>({}));
-  if (res.status===401 && t && !path.startsWith('/api/auth/')) {   // sesi habis -> login ulang
+  if (res.status===401 && t && !path.startsWith('/api/auth/')) {
     localStorage.clear(); alert('Sesi habis, silakan login lagi.'); location.href='/auth.html';
     throw new Error('Sesi habis');
   }
@@ -20,7 +23,7 @@ async function api(path, {method='GET', body, token}={}) {
   return data;
 }
 
-// Cegah klik ganda: nonaktifkan tombol selama proses berjalan (penyebab data dobel)
+// Guard Tombol (Mencegah Klik Ganda)
 async function guard(btn, fn){
   if(btn.dataset.busy) return;
   btn.dataset.busy='1'; const old=btn.textContent; btn.disabled=true; btn.textContent='Memproses...';
@@ -28,7 +31,7 @@ async function guard(btn, fn){
   finally{ btn.disabled=false; btn.textContent=old; delete btn.dataset.busy; }
 }
 
-// Kecilkan foto besar (Vercel menolak body > ~4.5MB)
+// Kompres Gambar sebelum Upload
 async function shrinkImage(file, maxSide=1600, quality=.85){
   if(!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 3.5*1024*1024) return file;
   try{
@@ -41,18 +44,17 @@ async function shrinkImage(file, maxSide=1600, quality=.85){
   }catch{ return file; }
 }
 
-// Upload gambar (jpg/png/webp/gif) -> return URL
+// Upload File Gambar ke Backend / Supabase
 async function uploadFile(file){
   file = await shrinkImage(file);
   const fd = new FormData(); fd.append('file', file);
   const t = localStorage.getItem('token');
   const res = await fetch('/api/upload', {method:'POST', headers:t?{Authorization:'Bearer '+t}:{}, body:fd});
   const data = await res.json().catch(()=>({}));
-  if(!res.ok) throw new Error(data.error || (res.status===413 ? 'File terlalu besar (maks 4MB)' : `Upload gagal (${res.status}) — storage belum diatur?`));
+  if(!res.ok) throw new Error(data.error || (res.status===413 ? 'File terlalu besar (maks 4MB)' : `Upload gagal (${res.status})`));
   return data.url;
 }
 
-// onchange input file: upload lalu isi input URL + preview (<img id="{urlId}Prev">)
 async function pickUpload(fileId, urlId, msgId){
   const f = $('#'+fileId).files[0]; if(!f) return;
   const msg = msgId ? $('#'+msgId) : null;
@@ -60,40 +62,50 @@ async function pickUpload(fileId, urlId, msgId){
   try{
     const url = await uploadFile(f);
     $('#'+urlId).value = url;
-    const pv = $('#'+urlId+'Prev'); if(pv){ pv.src=url; pv.style.display='block'; }     if(msg) msg.textContent = 'Upload OK ✓';   }catch(e){ if(msg) msg.textContent = '❌ '+e.message; else alert(e.message); } }  function currentUser(){ try{return JSON.parse(localStorage.getItem('user')\vert{}\vert{}'null')}catch{return null} } function saveSession(d){ localStorage.setItem('token', d.token); localStorage.setItem('user', JSON.stringify(d.user)); } function logout(){ localStorage.clear(); location.href='/'; } function requireAuth(role){   const u = currentUser();   if(!u){ location.href='/auth.html'; return null; }   if(role && u.role!==role && u.role!=='admin'){     alert(role==='creator' ? 'Halaman ini khusus creator. Klik "Buka Lapak" untuk menjadi creator.' : 'Halaman ini khusus customer.');     location.href='/'; return null;   }   return u; } function goBack(){ if(history.length>1 && document.referrer.startsWith(location.origin)) history.back(); else location.href='/'; } async function openStore(){   if(!confirm('Aktifkan akun creator?\n\nAkunmu akan menjadi akun creator (untuk menjual jasa). Akun creator tidak bisa memesan jasa, dan pesanan lamamu sebagai customer tidak tampil lagi.')) return;   try{ saveSession(await api('/api/me/become-creator',{method:'POST'})); location.href='/dashboard-creator.html#profil'; }   catch(e){ alert(e.message); } }  const CREATOR_MENU=[['orders','📥 Pesanan'],['jasa','💼 Jasa & Paket'],['portofolio','🖼️ Portofolio'],['booster','🚀 Booster'],['profil','👤 Profil Toko']]; function markSubnav(){   const k = location.hash.slice(1) \vert{}\vert{} 'orders';   const onDash = location.pathname.includes('dashboard-creator');   $$('.subnav a[data-k]').forEach(a=>a.classList.toggle('on', onDash && a.dataset.k===k));
+    const pv = $('#'+urlId+'Prev'); if(pv){ pv.src=url; pv.style.display='block'; }     if(msg) msg.textContent = 'Upload OK ✓';   }catch(e){ if(msg) msg.textContent = '❌ '+e.message; else alert(e.message); } }  // Session Management function currentUser(){ try{return JSON.parse(localStorage.getItem('user')\vert{}\vert{}'null')}catch{return null} } function saveSession(d){ localStorage.setItem('token', d.token); localStorage.setItem('user', JSON.stringify(d.user)); } function logout(){ localStorage.clear(); location.href='/'; }  function requireAuth(role){   const u = currentUser();   if(!u){ location.href='/auth.html'; return null; }   if(role && u.role!==role && u.role!=='admin'){     alert(role==='creator' ? 'Halaman ini khusus creator.' : 'Halaman ini khusus customer.');     location.href='/'; return null;   }   return u; }  function goBack(){ if(history.length>1 && document.referrer.startsWith(location.origin)) history.back(); else location.href='/'; }  async function openStore(){   if(!confirm('Aktifkan akun creator?\n\nAkunmu akan menjadi akun creator (untuk menjual jasa).')) return;   try{ saveSession(await api('/api/me/become-creator',{method:'POST'})); location.href='/dashboard-creator.html#profil'; }   catch(e){ alert(e.message); } }  // Subnav Creator const CREATOR_MENU=[['orders','📥 Pesanan'],['jasa','💼 Jasa & Paket'],['portofolio','🖼️ Portofolio'],['booster','🚀 Booster'],['profil','👤 Profil Toko']]; function markSubnav(){   const k = location.hash.slice(1) \vert{}\vert{} 'orders';   const onDash = location.pathname.includes('dashboard-creator');   $$('.subnav a[data-k]').forEach(a=>a.classList.toggle('on', onDash && a.dataset.k===k));
 }
 
+// Render Navigation Bar
 function navbar(){
   const u = currentUser();
-  // Cari berdasarkan ID #navLinks ATAU selector .links
-  const links = $('#navLinks') \vert{}\vert{} $('.links'); if(!links) return;
+  const links = $('#navLinks') \vert{}\vert{} $('.links'); 
+  if(!links) return;
+  
   const home = location.pathname==='/' || location.pathname==='/index.html';
   
-  if(!home && !$('#backBtn')) $('.nav-inner').insertAdjacentHTML('afterbegin','<button id="backBtn" class="btn small ghost" onclick="goBack()">← Kembali</button>');
+  if(!home && !$('#backBtn')){
+    const navInner = $('.nav-inner');
+    if(navInner) navInner.insertAdjacentHTML('afterbegin','<button id="backBtn" class="btn small ghost" onclick="goBack()">← Kembali</button>');
+  }
   
   links.innerHTML = `
     <a href="/" class="small">Explore</a>
     <a href="/creators.html" class="small">Cari Creator</a>
-    ${u&&u.role==='customer'?'<a href="/dashboard-customer.html" class="small">Pesanan Saya</a>':''}
-    ${u&&u.role==='admin'?'<a href="/dashboard-admin.html" class="small">⚙️ Admin</a>':''}
-    ${u?`<a href="/account.html" class="small">👤 ${esc(u.name)}</a>`:''}
-    ${u&&u.role==='customer'?'<button class="btn small warn" onclick="openStore()">Buka Lapak</button>':''}
-    ${u?'<button class="btn small ghost" onclick="logout()">Logout</button>':'<a href="/auth.html" class="btn small">Masuk / Daftar</a>'}`;
+    ${u && u.role === 'customer' ? '<a href="/dashboard-customer.html" class="small">Pesanan Saya</a>' : ''}
+    ${u && u.role === 'admin' ? '<a href="/dashboard-admin.html" class="small">⚙️ Admin</a>' : ''}
+    ${u ? `<a href="/account.html" class="small">👤 ${esc(u.name)}</a>` : ''}
+    ${u && u.role === 'customer' ? '<button class="btn small warn" onclick="openStore()">Buka Lapak</button>' : ''}
+    ${u ? '<button class="btn small ghost" onclick="logout()">Logout</button>' : '<a href="/auth.html" class="btn small" style="background:#7c3aed;color:#fff;padding:6px 14px;border-radius:6px;text-decoration:none;font-weight:600;">Masuk / Daftar</a>'}
+  `;
     
-  if(u && u.role==='creator' && !$('.subnav')){$('.nav').insertAdjacentHTML('afterend', `<div class="subnav"><div class="subnav-inner">
-      ${CREATOR_MENU.map(([k,l])=>`<a data-k="${k}" href="/dashboard-creator.html#${k}">${l}</a>`).join('')}
-      <a href="/store.html?creator=${u.id}">🏪 Lihat Toko</a></div></div>`);
-    markSubnav();
+  if(u && u.role==='creator' && !$('.subnav')){
+    const nav = $('.nav');
+    if(nav){
+      nav.insertAdjacentHTML('afterend', `<div class="subnav"><div class="subnav-inner">
+        ${CREATOR_MENU.map(([k,l])=>`<a data-k="${k}" href="/dashboard-creator.html#${k}">${l}</a>`).join('')}
+        <a href="/store.html?creator=${u.id}">🏪 Lihat Toko</a></div></div>`);
+      markSubnav();
+    }
   }
 }
 window.addEventListener('hashchange', markSubnav);
 
+// Status Badge Helpers
 const STATUS_LABEL={pending:'⏳ Menunggu creator',diterima:'✅ Diterima',dikerjakan:'🛠️ Dikerjakan',revisi:'🔁 Revisi',dikirim:'📤 Hasil dikirim',selesai:'🎉 Selesai',ditolak:'⛔ Ditolak',dibatalkan:'🚫 Dibatalkan'};
 function statusBadge(s){
   return `<span class="badge ${s==='selesai'?'open':(s==='ditolak'||s==='dibatalkan')?'closed':s==='dikirim'?'boost':'plan'}">${STATUS_LABEL[s]||s}</span>`;
 }
 
-// Badge khusus Status Pembayaran QRIS
 const PAY_STATUS_LABEL = {
   unpaid: '🔴 Belum Bayar',
   verifying: '🟡 Menunggu Verifikasi Admin',
@@ -111,3 +123,8 @@ function timeline(cur){
   const idx = cur==='revisi' ? 2 : steps.findIndex(s=>s[0]===cur);
   return `<div class="timeline">${steps.map(([k,l],i)=>`<span class="step ${i<=idx?'on':''}">${l}</span>`).join('')}${cur==='revisi'?'<span class="step on">🔁 sedang revisi</span>':''}</div>`;
 }
+
+// Inisialisasi otomatis saat dokumen siap
+document.addEventListener('DOMContentLoaded', () => {
+  navbar();
+});
