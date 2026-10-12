@@ -1,47 +1,136 @@
 <!doctype html>
 <html lang="id">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Masuk — Kreativa</title><link rel="stylesheet" href="/styles.css"></head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Masuk / Daftar — Kreativa</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
 <body>
-<nav class="nav"><div class="nav-inner"><a class="logo" href="/">🎨 Kreativa<span>.</span></a><div class="links" id="navLinks"></div></div></nav>
-<div class="container" style="max-width:480px;margin-top:24px">
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="logo" href="/">🎨 Kreativa<span>.</span></a>
+    <div class="links" id="navLinks"></div>
+  </div>
+</nav>
+
+<div class="container" style="max-width:420px;margin-top:40px">
   <div class="form-card">
-    <div class="tabs"><button class="tab on" id="tLogin" onclick="tab('login')">Login</button><button class="tab" id="tReg" onclick="tab('reg')">Daftar</button></div>
-    <div id="fLogin">
-      <label>Email</label><input id="lEmail" placeholder="kamu@email.com">
-      <label>Password</label><input id="lPass" type="password">
-      <button class="btn" style="margin-top:14px;width:100%" onclick="guard(this,login)">Masuk</button>
+    <div class="row" style="gap:8px;margin-bottom:20px;justify-content:center">
+      <button id="tabLogin" class="btn small" onclick="switchTab('login')">Login</button>
+      <button id="tabRegister" class="btn small ghost" onclick="switchTab('register')">Daftar</button>
     </div>
-    <div id="fReg" style="display:none">
-      <label>Nama</label><input id="rName">
-      <label>Email</label><input id="rEmail">
-      <label>Password (min 6)</label><input id="rPass" type="password">
-      <label>Daftar sebagai</label><select id="rRole"><option value="customer">Customer — saya mau memesan jasa</option><option value="creator">Creator — saya mau menjual jasa</option></select>
-      <button class="btn warn" style="margin-top:14px;width:100%" onclick="guard(this,reg)">Daftar</button>
-    </div>
-    <p id="msg" class="small"></p>
+
+    <!-- Form Login -->
+    <form id="formLogin" onsubmit="handleLogin(event)">
+      <div style="margin-bottom:12px">
+        <label class="small" style="display:block;margin-bottom:4px">Email</label>
+        <input type="email" id="loginEmail" placeholder="kamu@email.com" required style="width:100%">
+      </div>
+      <div style="margin-bottom:20px">
+        <label class="small" style="display:block;margin-bottom:4px">Password</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" required style="width:100%">
+      </div>
+      <button type="submit" id="btnLogin" class="btn" style="width:100%;background:#7c3aed;color:#fff">Masuk</button>
+    </form>
+
+    <!-- Form Register -->
+    <form id="formRegister" onsubmit="handleRegister(event)" style="display:none">
+      <div style="margin-bottom:12px">
+        <label class="small" style="display:block;margin-bottom:4px">Nama Lengkap</label>
+        <input type="text" id="regName" placeholder="Nama kamu" required style="width:100%">
+      </div>
+      <div style="margin-bottom:12px">
+        <label class="small" style="display:block;margin-bottom:4px">Email</label>
+        <input type="email" id="regEmail" placeholder="kamu@email.com" required style="width:100%">
+      </div>
+      <div style="margin-bottom:12px">
+        <label class="small" style="display:block;margin-bottom:4px">Password</label>
+        <input type="password" id="regPassword" placeholder="••••••••" required style="width:100%">
+      </div>
+      <div style="margin-bottom:20px">
+        <label class="small" style="display:block;margin-bottom:4px">Daftar Sebagai</label>
+        <select id="regRole" style="width:100%">
+          <option value="customer">Customer (Pembeli Jasa)</option>
+          <option value="creator">Creator (Penyedia Jasa)</option>
+        </select>
+      </div>
+      <button type="submit" id="btnRegister" class="btn" style="width:100%;background:#7c3aed;color:#fff">Daftar Akun</button>
+    </form>
   </div>
 </div>
+
 <script src="/app.js"></script>
 <script>
-navbar();
-const q=new URLSearchParams(location.search); if(q.get('role')){document.querySelector('#rRole').value=q.get('role'); tab('reg');}
-function tab(x){ $('#msg').textContent=''; $('#fLogin').style.display=x==='login'?'block':'none'; $('#fReg').style.display=x==='reg'?'block':'none'; $('#tLogin').classList.toggle('on',x==='login'); $('#tReg').classList.toggle('on',x==='reg'); }
-async function login(){
-  $('#msg').textContent='';
-  try{ const d=await api('/api/auth/login',{method:'POST',body:{email:$('#lEmail').value,password:$('#lPass').value}});
-    saveSession(d); location.href = d.user.role==='creator'?'/dashboard-creator.html#orders':'/'; }
-  catch(e){ $('#msg').textContent=e.message; }
+// Pindah Tab Login / Daftar
+function switchTab(mode) {
+  if (mode === 'login') {
+    $('#formLogin').style.display = 'block';
+    $('#formRegister').style.display = 'none';
+    $('#tabLogin').className = 'btn small';
+    $('#tabLogin').style.background = '';
+    $('#tabRegister').className = 'btn small ghost';
+  } else {
+    $('#formLogin').style.display = 'none';
+    $('#formRegister').style.display = 'block';
+    $('#tabLogin').className = 'btn small ghost';
+    $('#tabRegister').className = 'btn small';
+    $('#tabRegister').style.background = '';
+  }
 }
-async function reg(){
-  $('#msg').textContent='';
-  try{ const d=await api('/api/auth/register',{method:'POST',body:{name:$('#rName').value,email:$('#rEmail').value,password:$('#rPass').value,role:$('#rRole').value}});
-    saveSession(d); location.href = d.user.role==='creator'?'/dashboard-creator.html#profil':'/'; }   // creator baru: lengkapi profil toko dulu
-  catch(e){ $('#msg').textContent=e.message; }
+
+// Proses Login
+async function handleLogin(e) {
+  e.preventDefault();
+  const btn = $('#btnLogin');
+  await guard(btn, async () => {
+    const email = $('#loginEmail').value.trim();
+    const password = $('#loginPassword').value;
+    
+    const res = await api('/api/auth/login', {
+      method: 'POST',
+      body: { email, password }
+    });
+
+    saveSession(res);
+    alert('Berhasil masuk!');
+    
+    if (res.user.role === 'admin') location.href = '/dashboard-admin.html';
+    else if (res.user.role === 'creator') location.href = '/dashboard-creator.html';
+    else location.href = '/';
+  });
 }
-// sudah login sebagai customer lalu klik "Buka Lapak Creator": tawarkan aktivasi, bukan daftar ulang
-(function(){ const u=currentUser(); if(u&&u.role==='customer'&&q.get('role')==='creator'){
-  $('#msg').innerHTML='Kamu sudah login sebagai customer. <button class="btn small warn" onclick="openStore()">Aktifkan akun creator</button>'; } })();
+
+// Proses Register
+async function handleRegister(e) {
+  e.preventDefault();
+  const btn = $('#btnRegister');
+  await guard(btn, async () => {
+    const name = $('#regName').value.trim();
+    const email = $('#regEmail').value.trim();
+    const password = $('#regPassword').value;
+    const role = $('#regRole').value;
+
+    const res = await api('/api/auth/register', {
+      method: 'POST',
+      body: { name, email, password, role }
+    });
+
+    saveSession(res);
+    alert('Pendaftaran berhasil!');
+
+    if (res.user.role === 'creator') location.href = '/dashboard-creator.html#profil';
+    else location.href = '/';
+  });
+}
+
+// Redirect jika sudah login
+document.addEventListener('DOMContentLoaded', () => {
+  if (currentUser()) {
+    location.href = '/';
+  }
+});
 </script>
 </body>
 </html>
