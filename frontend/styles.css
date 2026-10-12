@@ -117,7 +117,7 @@ a {
   margin-left: auto;
 }
 
-.links a.small {
+.links a.small:not(.btn) {
   color: var(--muted);
   font-weight: 500;
   padding: 6px 12px;
@@ -125,8 +125,27 @@ a {
   transition: all 0.15s ease;
 }
 
-.links a.small:hover {
+.links a.small:not(.btn):hover {
   color: var(--ink);
+  background: var(--border-light);
+}
+
+.links a.btn {
+  color: #ffffff !important;
+  background: var(--accent);
+}
+
+.links a.btn:hover {
+  color: #ffffff !important;
+  background: var(--accent-hover);
+}
+
+.links a.btn.ghost {
+  color: var(--ink) !important;
+  background: #ffffff;
+}
+
+.links a.btn.ghost:hover {
   background: var(--border-light);
 }
 

@@ -148,7 +148,7 @@ function navbar(){
     ${u && u.role === 'admin' ? '<a href="/dashboard-admin.html" class="small">Admin</a>' : ''}
     ${u ? `<a href="/account.html" class="small">${esc(u.name)}</a>` : ''}
     ${u && u.role === 'customer' ? '<button class="btn small ghost" onclick="openStore()">Buka Lapak</button>' : ''}
-    ${u ? '<button class="btn small ghost" onclick="logout()">Logout</button>' : '<a href="/auth.html" class="btn small">Masuk / Daftar</a>'}
+    ${u ? '<button class="btn small ghost" onclick="logout()">Logout</button>' : '<a href="/auth.html" class="btn small" style="color:#ffffff">Masuk / Daftar</a>'}
   `;
     
   if(u && u.role==='creator' && !$('.subnav')){
