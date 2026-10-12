@@ -1,3 +1,22 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pesanan Saya — Kreativa</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<nav class="nav"><div class="nav-inner"><a class="logo" href="/">🎨 Kreativa<span>.</span></a><div class="links" id="navLinks"></div></div></nav>
+<div class="container" style="margin-top:16px;max-width:800px">
+  <h2>📦 Pesanan Saya</h2>
+  <div id="view"><p>Memuat...</p></div>
+</div>
+<script src="/app.js"></script>
+<script>
+requireAuth('customer');
+navbar();
+
 async function renderOrders() {
   const all = await api('/api/orders');
   const qrisRes = await api('/api/qris');
@@ -5,40 +24,52 @@ async function renderOrders() {
 
   $('#view').innerHTML = all.length ? all.map(o => `
     <div class="form-card" style="margin:10px 0">
-      <div class="row" style="justify-space-between">
-        <b>Order #${o.id} • ${esc(o.service_title)}</b>
+      <div class="row" style="justify-content:space-between">
+        <b>Order #${o.id} • ${esc(o.service_title||'—')}</b>
         <div>${statusBadge(o.status)} ${payStatusBadge(o.payment_status || 'unpaid')}</div>
       </div>
-      <p class="small">Harga: <b>${rupiah(o.price_snapshot)}</b></p>
-      
+      <p class="small">Creator: <b>${esc(o.creator_name||'—')}</b> • Paket: ${esc(o.package_name||'—')} • Harga: <b>${rupiah(o.price_snapshot)}</b></p>
+      <div class="row" style="margin-top:6px">
+        <a class="btn small ghost" href="/order.html?id=${o.id}">Lihat Detail</a>
+        ${['pending','diterima'].includes(o.status)?`<button class="btn small ghost" onclick="guard(this,()=>cancelOrder(${o.id}))">Batalkan</button>`:''}
+      </div>
+
       <!-- TAMPILAN PEMBAYARAN -->
       ${renderPaymentSection(o, qrisUrl)}
     </div>
-  `).join('') : '<p class="muted">Belum ada pesanan.</p>';
+  `).join('') : '<p class="muted">Belum ada pesanan. <a href="/" style="color:var(--accent)">Cari jasa →</a></p>';
 }
 
 function renderPaymentSection(o, qrisUrl) {
   if (o.payment_status === 'paid') {
-    return `<p class="small text-success">✓ Pembayaran lunas. Creator sedang memproses pesananmu.</p>`;
+    return `<div class="hint" style="margin-top:8px">✅ Pembayaran lunas. Creator sedang memproses pesananmu.</div>`;
   }
   if (o.payment_status === 'verifying') {
-    return `<div class="hint">⏳ Bukti pembayaranmu sudah dikirim dan sedang dicek oleh Admin.</div>`;
+    return `<div class="hint" style="margin-top:8px">⏳ Bukti pembayaranmu sudah dikirim dan sedang dicek oleh Admin.</div>`;
   }
-  
+  if (o.payment_status === 'rejected') {
+    return `<div class="hint" style="margin-top:8px;background:#fee2e2;border-color:#fca5a5">❌ Pembayaran ditolak oleh Admin. Silakan upload ulang bukti transfer yang benar.</div>
+    ${paymentUploadForm(o, qrisUrl)}`;
+  }
+
+  // unpaid / default
+  return paymentUploadForm(o, qrisUrl);
+}
+
+function paymentUploadForm(o, qrisUrl) {
   return `
     <div class="form-card" style="background:#f9f9f9;margin-top:10px">
       <h4>💳 Pembayaran QRIS</h4>
-      ${qrisUrl ? `<img src="${qrisUrl}" style="max-width:200px;display:block;margin:10px 0;border:1px solid #ccc;padding:5px">` : '<p class="warn">QRIS belum diatur oleh Admin.</p>'}
+      ${qrisUrl ? `<img src="${qrisUrl}" style="max-width:200px;display:block;margin:10px 0;border:1px solid #ccc;padding:5px">` : '<p class="small muted">QRIS belum diatur oleh Admin.</p>'}
       <p class="small">Silakan scan QRIS di atas sebesar <b>${rupiah(o.price_snapshot)}</b>, lalu upload bukti pembayarannya di bawah (format JPG/PNG):</p>
-      
+
       <div class="row">
         <input type="file" id="payFile-${o.id}" accept=".jpg,.jpeg,.png" style="flex:1" onchange="pickUpload('payFile-${o.id}','payUrl-${o.id}','payMsg-${o.id}')">
         <span class="small muted" id="payMsg-${o.id}"></span>
       </div>
       <input type="hidden" id="payUrl-${o.id}">
       <button class="btn small" style="margin-top:8px" onclick="guard(this,()=>submitPay(${o.id}))">📤 Kirim Bukti Pembayaran</button>
-    </div>
-  `;
+    </div>`;
 }
 
 async function submitPay(oid) {
@@ -48,3 +79,14 @@ async function submitPay(oid) {
   alert('Bukti pembayaran berhasil dikirim! Menunggu verifikasi admin.');
   renderOrders();
 }
+
+async function cancelOrder(oid) {
+  if (!confirm('Batalkan pesanan ini?')) return;
+  await api('/api/orders/' + oid + '/status', { method: 'PATCH', body: { status: 'dibatalkan' } });
+  renderOrders();
+}
+
+renderOrders().catch(e => $('#view').innerHTML = '<p>' + esc(e.message) + '</p>');
+</script>
+</body>
+</html>

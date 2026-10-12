@@ -55,7 +55,7 @@ async function loadPayments() {
   $('#paymentList').innerHTML = list.length ? list.map(p => `
     <div class="form-card" style="margin:10px 0">
       <div class="row" style="justify-content:space-between">
-        <b>Order #${p.id} • ${esc(p.customer_name)} $\rightarrow$ ${esc(p.creator_name)}</b>
+        <b>Order #${p.id} • ${esc(p.customer_name)} → ${esc(p.creator_name)}</b>
         ${payStatusBadge(p.payment_status)}
       </div>
       <p class="small">Total Pembayaran: <b>${rupiah(p.price_snapshot)}</b></p>

@@ -62,13 +62,76 @@ async function pickUpload(fileId, urlId, msgId){
   try{
     const url = await uploadFile(f);
     $('#'+urlId).value = url;
-    const pv = $('#'+urlId+'Prev'); if(pv){ pv.src=url; pv.style.display='block'; }     if(msg) msg.textContent = 'Upload OK ✓';   }catch(e){ if(msg) msg.textContent = '❌ '+e.message; else alert(e.message); } }  // Session Management function currentUser(){ try{return JSON.parse(localStorage.getItem('user')\vert{}\vert{}'null')}catch{return null} } function saveSession(d){ localStorage.setItem('token', d.token); localStorage.setItem('user', JSON.stringify(d.user)); } function logout(){ localStorage.clear(); location.href='/'; }  function requireAuth(role){   const u = currentUser();   if(!u){ location.href='/auth.html'; return null; }   if(role && u.role!==role && u.role!=='admin'){     alert(role==='creator' ? 'Halaman ini khusus creator.' : 'Halaman ini khusus customer.');     location.href='/'; return null;   }   return u; }  function goBack(){ if(history.length>1 && document.referrer.startsWith(location.origin)) history.back(); else location.href='/'; }  async function openStore(){   if(!confirm('Aktifkan akun creator?\n\nAkunmu akan menjadi akun creator (untuk menjual jasa).')) return;   try{ saveSession(await api('/api/me/become-creator',{method:'POST'})); location.href='/dashboard-creator.html#profil'; }   catch(e){ alert(e.message); } }  // Subnav Creator const CREATOR_MENU=[['orders','📥 Pesanan'],['jasa','💼 Jasa & Paket'],['portofolio','🖼️ Portofolio'],['booster','🚀 Booster'],['profil','👤 Profil Toko']]; function markSubnav(){   const k = location.hash.slice(1) \vert{}\vert{} 'orders';   const onDash = location.pathname.includes('dashboard-creator');   $$('.subnav a[data-k]').forEach(a=>a.classList.toggle('on', onDash && a.dataset.k===k));
+    const pv = $('#'+urlId+'Prev');
+    if(pv){ pv.src=url; pv.style.display='block'; }
+    if(msg) msg.textContent = 'Upload OK ✓';
+  }catch(e){
+    if(msg) msg.textContent = '❌ '+e.message;
+    else alert(e.message);
+  }
+}
+
+// Session Management
+function currentUser(){
+  try{
+    return JSON.parse(localStorage.getItem('user') || 'null');
+  }catch{
+    return null;
+  }
+}
+
+function saveSession(d){
+  localStorage.setItem('token', d.token);
+  localStorage.setItem('user', JSON.stringify(d.user));
+}
+
+function logout(){
+  localStorage.clear();
+  location.href='/';
+}
+
+function requireAuth(role){
+  const u = currentUser();
+  if(!u){
+    location.href='/auth.html';
+    return null;
+  }
+  if(role && u.role!==role && u.role!=='admin'){
+    alert(role==='creator' ? 'Halaman ini khusus creator.' : 'Halaman ini khusus customer.');
+    location.href='/';
+    return null;
+  }
+  return u;
+}
+
+function goBack(){
+  if(history.length>1 && document.referrer.startsWith(location.origin)) history.back();
+  else location.href='/';
+}
+
+async function openStore(){
+  if(!confirm('Aktifkan akun creator?\n\nAkunmu akan menjadi akun creator (untuk menjual jasa).')) return;
+  try{
+    saveSession(await api('/api/me/become-creator',{method:'POST'}));
+    location.href='/dashboard-creator.html#profil';
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+// Subnav Creator
+const CREATOR_MENU=[['orders','📥 Pesanan'],['jasa','💼 Jasa & Paket'],['portofolio','🖼️ Portofolio'],['booster','🚀 Booster'],['profil','👤 Profil Toko']];
+
+function markSubnav(){
+  const k = location.hash.slice(1) || 'orders';
+  const onDash = location.pathname.includes('dashboard-creator');
+  $$('.subnav a[data-k]').forEach(a=>a.classList.toggle('on', onDash && a.dataset.k===k));
 }
 
 // Render Navigation Bar
 function navbar(){
   const u = currentUser();
-  const links = $('#navLinks') \vert{}\vert{} $('.links'); 
+  const links = $('#navLinks') || $('.links'); 
   if(!links) return;
   
   const home = location.pathname==='/' || location.pathname==='/index.html';

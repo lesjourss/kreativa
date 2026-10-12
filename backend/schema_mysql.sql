@@ -76,7 +76,10 @@ CREATE TABLE IF NOT EXISTS orders (
   note TEXT NULL,
   price_snapshot INT NOT NULL DEFAULT 0,
   status VARCHAR(20) NOT NULL DEFAULT 'pending'
-    CHECK (status IN ('pending','diterima','dikerjakan','revisi','selesai','ditolak','dibatalkan')),
+    CHECK (status IN ('pending','diterima','dikerjakan','revisi','dikirim','selesai','ditolak','dibatalkan')),
+  payment_proof_url VARCHAR(2000) NOT NULL DEFAULT '',
+  payment_status VARCHAR(20) NOT NULL DEFAULT 'unpaid'
+    CHECK (payment_status IN ('unpaid','verifying','paid','rejected')),
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (customer_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -130,4 +133,22 @@ CREATE TABLE IF NOT EXISTS booster_purchases (
   FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (booster_plan_id) REFERENCES booster_plans(id),
   FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS deliveries (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  order_id INT NOT NULL,
+  creator_id INT NOT NULL,
+  note TEXT NULL,
+  file_url VARCHAR(2000) NOT NULL DEFAULT '',
+  link_url VARCHAR(2000) NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+  FOREIGN KEY (creator_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS payment_settings (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  qris_image_url VARCHAR(2000) NOT NULL DEFAULT '',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

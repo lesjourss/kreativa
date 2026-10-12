@@ -26,9 +26,8 @@ async function init(){
 }
 async function saveProfile(){
   const name=$('#nm').value.trim(), av=$('#av').value.trim();
-  await api('/api/me',{method:'PATCH',body:{name}});
-  if(me.role==='creator') await api('/api/creator/profile',{method:'PATCH',body:{avatar_url:av}});   // sinkron foto toko
-  else await api('/api/me',{method:'PATCH',body:{name,avatar_url:av}});
+  await api('/api/me',{method:'PATCH',body:{name,avatar_url:av}});
+  if(me.role==='creator') await api('/api/creator/profile',{method:'PATCH',body:{avatar_url:av}});
   saveSession({token:localStorage.getItem('token'),user:{...me,name,avatar_url:av}});
   alert('Tersimpan!'); location.reload();
 }

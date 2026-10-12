@@ -1,7 +1,68 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dashboard Creator — Kreativa</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<nav class="nav"><div class="nav-inner"><a class="logo" href="/">🎨 Kreativa<span>.</span></a><div class="links" id="navLinks"></div></div></nav>
+<div class="container" style="margin-top:16px">
+  <h2 id="dashTitle">📥 Pesanan Masuk</h2>
+  <div id="view"><p>Memuat...</p></div>
+</div>
+<script src="/app.js"></script>
+<script>
+const me = requireAuth('creator');
+navbar();
+
+// ---------- Routing berdasarkan hash ----------
+const SECTIONS = {orders:'📥 Pesanan Masuk', jasa:'💼 Jasa & Paket', portofolio:'🖼️ Portofolio', booster:'🚀 Booster', profil:'👤 Profil Toko'};
+function route(){
+  const k = location.hash.slice(1) || 'orders';
+  $('#dashTitle').textContent = SECTIONS[k] || SECTIONS.orders;
+  markSubnav();
+  if(k==='orders') renderOrders();
+  else if(k==='jasa') renderJasa();
+  else if(k==='portofolio') renderPortofolio();
+  else if(k==='booster') renderBooster();
+  else if(k==='profil') renderProfil();
+  else renderOrders();
+}
+window.addEventListener('hashchange', route);
+
+// ===== TAB 1: PESANAN =====
+async function renderOrders(){
+  const all = await api('/api/orders');
+  $('#view').innerHTML = all.length ? `<div class="tabs">
+    <button class="tab on" onclick="filterOrders(this,'all')">Semua (${all.length})</button>
+    <button class="tab" onclick="filterOrders(this,'pending')">Menunggu</button>
+    <button class="tab" onclick="filterOrders(this,'dikerjakan')">Dikerjakan</button>
+    <button class="tab" onclick="filterOrders(this,'selesai')">Selesai</button>
+  </div><div id="orderList">${orderCards(all)}</div>` : '<p class="muted">Belum ada pesanan masuk.</p>';
+}
+function filterOrders(btn, f){
+  $$('.tabs .tab').forEach(t=>t.classList.remove('on')); btn.classList.add('on');
+  api('/api/orders').then(all=>{
+    const filtered = f==='all' ? all : all.filter(o=>o.status===f);
+    $('#orderList').innerHTML = filtered.length ? orderCards(filtered) : '<p class="muted">Tidak ada pesanan dengan status ini.</p>';
+  });
+}
+function orderCards(list){
+  return list.map(o=>`<div class="form-card" style="margin:10px 0">
+    <div class="row" style="justify-content:space-between">
+      <b>Order #${o.id} • ${esc(o.service_title||'—')}</b>
+      <div>${statusBadge(o.status)} ${payStatusBadge(o.payment_status||'unpaid')}</div>
+    </div>
+    <p class="small">Customer: <b>${esc(o.customer_name)}</b> • Paket: ${esc(o.package_name||'—')} • ${rupiah(o.price_snapshot)}</p>
+    <div class="row">${orderActions(o)}</div>
+  </div>`).join('');
+}
 function orderActions(o){
   // Cegah pengerjaan jika belum lunas
   if (o.payment_status !== 'paid') {
-    return `<span class="small muted">⏳ Menunggu Verifikasi Pembayaran Lunas oleh Admin</span>`;
+    return `<a class="btn small ghost" href="/order.html?id=${o.id}">Detail</a> <span class="small muted">⏳ Menunggu Verifikasi Pembayaran Lunas oleh Admin</span>`;
   }
 
   const b=(s,l,c='ghost')=>`<button class="btn small ${c}" onclick="guard(this,()=>setStatus(${o.id},'${s}'))">${l}</button>`;
@@ -12,3 +73,187 @@ function orderActions(o){
   if(o.status==='revisi') h+=b('dikerjakan','Mulai kerjakan revisi');
   return h;
 }
+async function setStatus(id, s){
+  await api('/api/orders/'+id+'/status',{method:'PATCH',body:{status:s}});
+  renderOrders();
+}
+
+// ===== TAB 2: JASA & PAKET =====
+async function renderJasa(){
+  const [services, cats] = await Promise.all([
+    api('/api/creators/'+me.id+'/store').then(d=>d.services),
+    api('/api/categories')
+  ]);
+  $('#view').innerHTML = `
+    <div class="form-card" style="margin-bottom:16px">
+      <h3>➕ Tambah Jasa Baru</h3>
+      <label>Judul jasa (min 4 karakter)</label><input id="sTitle" placeholder="Contoh: Desain Logo Modern">
+      <label>Deskripsi (min 10 karakter)</label><textarea id="sDesc" rows="3" placeholder="Jelaskan jasa yang kamu tawarkan..."></textarea>
+      <label>Kategori</label><select id="sCat"><option value="">Pilih kategori</option>${cats.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
+      <label>Thumbnail</label>
+      <div class="row"><input type="file" id="sThumbFile" accept=".jpg,.jpeg,.png,.webp,.gif" style="flex:1" onchange="pickUpload('sThumbFile','sThumb','sThumbMsg')"><span class="small muted" id="sThumbMsg"></span></div>
+      <img id="sThumbPrev" class="prev"><input id="sThumb" type="hidden">
+      <button class="btn" style="margin-top:10px" onclick="guard(this,addService)">Tambah Jasa</button>
+    </div>
+    <h3>Jasa Kamu (${services.length})</h3>
+    <div id="jasaList">${services.length ? services.map(s=>jasaCard(s)).join('') : '<p class="muted">Belum ada jasa. Tambah jasa pertamamu!</p>'}</div>`;
+}
+function jasaCard(s){
+  return `<div class="form-card" style="margin:10px 0">
+    <div class="row" style="justify-content:space-between">
+      <h4 style="margin:0">${esc(s.title)} ${s.is_boosted?'<span class="badge boost">⚡ Promoted</span>':''}</h4>
+      <div><button class="btn small ghost" onclick="guard(this,()=>delService(${s.id}))">🗑️ Hapus</button></div>
+    </div>
+    <p class="small muted">${esc(s.category_name||'Tanpa kategori')} • ${esc((s.description||'').slice(0,100))}</p>
+    <h5>Paket (${s.packages.length})</h5>
+    ${s.packages.map(p=>`<div class="pkg row" style="justify-content:space-between">
+      <span><b>${esc(p.name)}</b> — ${rupiah(p.price)} • ⏱ ${p.estimated_days}hr • 🔁 ${p.revision_count}x</span>
+      <button class="btn small ghost" onclick="guard(this,()=>delPkg(${p.id}))">🗑️</button>
+    </div>`).join('')||'<p class="small muted">Belum ada paket.</p>'}
+    <div class="pkg-form" style="margin-top:8px;padding-top:8px;border-top:1px dashed #eee">
+      <input id="pName-${s.id}" placeholder="Nama paket">
+      <input id="pPrice-${s.id}" type="number" placeholder="Harga (Rp)" min="0">
+      <input id="pDays-${s.id}" type="number" placeholder="Estimasi (hari)" min="1" value="3">
+      <input id="pRev-${s.id}" type="number" placeholder="Revisi" min="0" value="1">
+      <button class="btn small" onclick="guard(this,()=>addPkg(${s.id}))">+ Paket</button>
+    </div>
+  </div>`;
+}
+async function addService(){
+  const cat = $('#sCat').value;
+  await api('/api/services',{method:'POST',body:{title:$('#sTitle').value,description:$('#sDesc').value,category_id:cat?+cat:null,thumbnail_url:$('#sThumb').value||''}});
+  alert('Jasa berhasil ditambahkan!');
+  renderJasa();
+}
+async function delService(id){
+  if(!confirm('Hapus jasa ini beserta semua paketnya?')) return;
+  await api('/api/services/'+id,{method:'DELETE'});
+  renderJasa();
+}
+async function addPkg(sid){
+  await api('/api/services/'+sid+'/packages',{method:'POST',body:{
+    name:$('#pName-'+sid).value,
+    price:+$('#pPrice-'+sid).value,
+    estimated_days:+$('#pDays-'+sid).value,
+    revision_count:+$('#pRev-'+sid).value
+  }});
+  renderJasa();
+}
+async function delPkg(pid){
+  if(!confirm('Hapus paket ini?')) return;
+  await api('/api/packages/'+pid,{method:'DELETE'});
+  renderJasa();
+}
+
+// ===== TAB 3: PORTOFOLIO =====
+async function renderPortofolio(){
+  const items = await api('/api/portfolios?creator_id='+me.id);
+  $('#view').innerHTML = `
+    <div class="form-card" style="margin-bottom:16px">
+      <h3>➕ Tambah Portofolio</h3>
+      <label>Judul karya</label><input id="pfTitle" placeholder="Contoh: Logo Kedai Kopi XYZ">
+      <label>Deskripsi (opsional)</label><textarea id="pfDesc" rows="2"></textarea>
+      <label>Gambar karya (JPG/PNG)</label>
+      <div class="row"><input type="file" id="pfFile" accept=".jpg,.jpeg,.png,.webp,.gif" style="flex:1" onchange="pickUpload('pfFile','pfUrl','pfMsg')"><span class="small muted" id="pfMsg"></span></div>
+      <img id="pfUrlPrev" class="prev"><input id="pfUrl" type="hidden">
+      <button class="btn" style="margin-top:10px" onclick="guard(this,addPorto)">Upload Portofolio</button>
+    </div>
+    <h3>Portofolio Kamu (${items.length})</h3>
+    <div class="grid cards">${items.map(p=>`<div class="card">
+      <img class="thumb" src="${esc(p.image_url)}" onerror="this.onerror=null;this.src='https://picsum.photos/seed/kreativa/600/400'">
+      <div class="card-body">
+        <b>${esc(p.title||'Tanpa judul')}</b>
+        <p class="small muted">${esc(p.description||'')}</p>
+        <button class="btn small ghost" onclick="guard(this,()=>delPorto(${p.id}))">🗑️ Hapus</button>
+      </div>
+    </div>`).join('')||'<p class="muted">Belum ada portofolio.</p>'}</div>`;
+}
+async function addPorto(){
+  const url = $('#pfUrl').value;
+  if(!url) throw new Error('Upload gambar dulu!');
+  await api('/api/portfolios',{method:'POST',body:{title:$('#pfTitle').value,description:$('#pfDesc').value,image_url:url}});
+  alert('Portofolio ditambahkan!');
+  renderPortofolio();
+}
+async function delPorto(pid){
+  if(!confirm('Hapus portofolio ini?')) return;
+  await api('/api/portfolios/'+pid,{method:'DELETE'});
+  renderPortofolio();
+}
+
+// ===== TAB 4: BOOSTER =====
+async function renderBooster(){
+  const [plans, mine] = await Promise.all([api('/api/booster/plans'), api('/api/booster/mine')]);
+  const services = await api('/api/creators/'+me.id+'/store').then(d=>d.services);
+  const active = mine.filter(b=>b.payment_status==='paid' && new Date(b.end_date)>new Date());
+  $('#view').innerHTML = `
+    ${active.length?`<div class="hint">🚀 <b>${active.length}</b> booster aktif saat ini.</div>`:''}
+    <h3>Paket Booster Tersedia</h3>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+      ${plans.map(p=>`<div class="form-card" style="text-align:center">
+        <h3 style="margin:0">${esc(p.name)}</h3>
+        <p class="small muted">${esc(p.description)}</p>
+        <b style="font-size:20px;color:var(--accent)">${rupiah(p.price)}</b>
+        <p class="small">${p.duration_days} hari</p>
+        <select id="bSvc-${p.id}" style="margin:8px 0">
+          <option value="">Boost seluruh toko</option>
+          ${services.map(s=>`<option value="${s.id}">${esc(s.title)}</option>`).join('')}
+        </select>
+        <button class="btn small" onclick="guard(this,()=>buyBoost(${p.id}))">Beli Booster</button>
+      </div>`).join('')}
+    </div>
+    <h3 style="margin-top:20px">Riwayat Booster</h3>
+    ${mine.length?`<table><thead><tr><th>Paket</th><th>Mulai</th><th>Berakhir</th><th>Status</th></tr></thead><tbody>
+      ${mine.map(b=>`<tr><td>${esc(b.plan_name)}</td><td>${fmtDate(b.start_date)}</td><td>${fmtDate(b.end_date)}</td>
+        <td>${new Date(b.end_date)>new Date()?'<span class="badge open">Aktif</span>':'<span class="badge closed">Berakhir</span>'}</td></tr>`).join('')}
+    </tbody></table>`:'<p class="muted">Belum pernah membeli booster.</p>'}`;
+}
+async function buyBoost(planId){
+  const svcEl = $('#bSvc-'+planId);
+  const svc = svcEl ? svcEl.value : '';
+  const body = {booster_plan_id:planId};
+  if(svc) body.service_id = +svc;
+  if(!confirm('Beli booster ini? (Pembayaran simulasi)')) return;
+  await api('/api/booster/purchase',{method:'POST',body});
+  alert('Booster aktif! Jasa kamu sekarang diprioritaskan di pencarian.');
+  renderBooster();
+}
+
+// ===== TAB 5: PROFIL TOKO =====
+async function renderProfil(){
+  const {profile} = await api('/api/creator/profile');
+  const p = profile || {};
+  $('#view').innerHTML = `<div class="form-card">
+    <h3>Edit Profil Toko</h3>
+    <label>Bio / deskripsi toko (maks 2000 karakter)</label>
+    <textarea id="prBio" rows="4">${esc(p.bio||'')}</textarea>
+    <label>Foto profil toko</label>
+    <div class="row"><input type="file" id="prAvFile" accept=".jpg,.jpeg,.png,.webp,.gif" style="flex:1" onchange="pickUpload('prAvFile','prAv','prAvMsg')"><span class="small muted" id="prAvMsg"></span></div>
+    <img id="prAvPrev" src="${esc(p.avatar_url||'')}" class="prev" ${p.avatar_url?'style="display:block"':''}>
+    <input id="prAv" value="${esc(p.avatar_url||'')}" placeholder="...atau tempel URL foto" style="margin-top:6px">
+    <button class="btn" style="margin-top:12px" onclick="guard(this,saveProfil)">Simpan Profil</button>
+    <hr style="margin:16px 0">
+    <h3>Status Ketersediaan</h3>
+    <p class="small muted">Saat Closed, customer tidak bisa memesan jasa kamu.</p>
+    <div class="row">
+      <button class="btn small ${p.availability_status==='open'?'':'ghost'}" onclick="guard(this,()=>setAvail('open'))">🟢 Open for Order</button>
+      <button class="btn small ${p.availability_status==='closed'?'warn':'ghost'}" onclick="guard(this,()=>setAvail('closed'))">🔴 Closed</button>
+    </div>
+    <p class="small muted" style="margin-top:8px">Status saat ini: <b>${p.availability_status==='closed'?'🔴 Closed':'🟢 Open'}</b></p>
+  </div>`;
+}
+async function saveProfil(){
+  await api('/api/creator/profile',{method:'PATCH',body:{bio:$('#prBio').value,avatar_url:$('#prAv').value}});
+  alert('Profil tersimpan!');
+  renderProfil();
+}
+async function setAvail(status){
+  await api('/api/creator/availability',{method:'PATCH',body:{availability_status:status}});
+  renderProfil();
+}
+
+// ===== INIT =====
+route();
+</script>
+</body>
+</html>

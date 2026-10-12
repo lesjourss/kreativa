@@ -8,6 +8,12 @@ Konfigurasi lewat environment (Vercel > Settings > Environment Variables):
 """
 import os
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import SimpleConnectionPool

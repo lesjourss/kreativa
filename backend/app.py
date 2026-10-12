@@ -129,7 +129,7 @@ def row_to_dict(row):
 
 
 def now_str():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 # ---------- Auth helpers ----------
@@ -172,6 +172,8 @@ def role_required(*roles):
     def deco(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
+            if not getattr(g, "user", None):
+                return jsonify({"error": "Unauthorized"}), 401
             if g.user["role"] not in roles and g.user["role"] != "admin":
                 return jsonify({"error": "Akses ditolak untuk role ini"}), 403
             return f(*args, **kwargs)
@@ -352,7 +354,7 @@ def list_services():
            WHERE 1=1"""
     params = []
     if category and category.lower() not in ("all", "semua", "0", "null", "undefined"):
-        q += " AND (c.name = %s OR CAST(c.id AS TEXT) = %s)"
+        q += " AND (c.name = %s OR c.id::TEXT = %s)"
         params += [category, category]
     if search:
         q += " AND (s.title ILIKE %s OR s.description ILIKE %s OR u.name ILIKE %s)"
@@ -614,7 +616,7 @@ def list_creators():
     if category and category.lower() not in ("all", "semua", "0", "null", "undefined"):
         q += """ AND EXISTS (SELECT 1 FROM services s
                    LEFT JOIN service_categories c ON c.id = s.category_id
-                   WHERE s.creator_id = u.id AND (c.name = %s OR CAST(c.id AS TEXT) = %s))"""
+                   WHERE s.creator_id = u.id AND (c.name = %s OR c.id::TEXT = %s))"""
         params += [category, category]
     if open_only:
         q += " AND cp.availability_status = 'open'"
@@ -927,8 +929,12 @@ def update_order_status(oid):
         else:
             if new_status == "dibatalkan":
                 return jsonify({"error": "Creator tidak bisa membatalkan; gunakan status ditolak"}), 400
-            if new_status in ("dikirim", "selesai", "revisi"):
-                return jsonify({"error": "Kirim hasil lewat tombol Kirim Hasil. Order diselesaikan customer setelah menyetujui hasil."}), 403
+            if new_status in ("dikirim",):
+                return jsonify({"error": "Kirim hasil lewat tombol Kirim Hasil."}), 403
+            if new_status == "selesai":
+                return jsonify({"error": "Order diselesaikan oleh customer setelah menyetujui hasil."}), 403
+            if new_status == "revisi":
+                return jsonify({"error": "Revisi hanya bisa diminta oleh customer setelah menerima hasil."}), 403
     db.execute("UPDATE orders SET status=%s, updated_at=%s WHERE id=%s", (new_status, now_str(), oid))
     db.commit()
     return jsonify({"ok": True, "status": new_status})

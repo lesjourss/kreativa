@@ -71,7 +71,10 @@ CREATE TABLE IF NOT EXISTS orders (
   note TEXT DEFAULT '',
   price_snapshot INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'pending'
-    CHECK (status IN ('pending','diterima','dikerjakan','revisi','selesai','ditolak','dibatalkan')),
+    CHECK (status IN ('pending','diterima','dikerjakan','revisi','dikirim','selesai','ditolak','dibatalkan')),
+  payment_proof_url TEXT DEFAULT '',
+  payment_status TEXT NOT NULL DEFAULT 'unpaid'
+    CHECK (payment_status IN ('unpaid','verifying','paid','rejected')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -112,4 +115,20 @@ CREATE TABLE IF NOT EXISTS booster_purchases (
   start_date TEXT NOT NULL,
   end_date TEXT NOT NULL,
   payment_status TEXT NOT NULL DEFAULT 'paid' CHECK (payment_status IN ('pending','paid','failed'))
+);
+
+CREATE TABLE IF NOT EXISTS deliveries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  creator_id INTEGER NOT NULL REFERENCES users(id),
+  note TEXT DEFAULT '',
+  file_url TEXT DEFAULT '',
+  link_url TEXT DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS payment_settings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  qris_image_url TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
