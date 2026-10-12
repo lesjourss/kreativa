@@ -11,7 +11,11 @@
 <nav class="nav">
   <div class="nav-inner">
     <a class="logo" href="/">🎨 Kreativa<span>.</span></a>
-    <div class="links" id="navLinks"></div>
+    <div class="links" id="navLinks">
+      <a href="/" class="small">Explore</a>
+      <a href="/creators.html" class="small">Cari Creator</a>
+      <a href="/auth.html" class="btn small" style="background:#7c3aed;color:#fff;padding:8px 16px;border-radius:8px;font-weight:600;text-decoration:none">Masuk / Daftar</a>
+    </div>
   </div>
 </nav>
 
@@ -20,9 +24,9 @@
     <h1 style="margin:0 0 10px 0;font-size:28px">Semua jasa kreatif, dalam satu tempat.</h1>
     <p style="margin:0 0 16px 0;opacity:0.9">Portofolio, harga, estimasi & status order transparan — tanpa tanya-tanya via DM lagi. Untuk desainer, ilustrator, videografer, hingga copywriter.</p>
     <div class="row" style="gap:8px">
-      <a class="btn" style="background:#fff;color:#7c3aed" href="#explore">Cari Jasa</a>
-      <a class="btn ghost" style="color:#fff;border:1px solid #fff" href="/creators.html">Cari Creator</a>
-      <button class="btn warn" onclick="openStore()">Buka Lapak Creator</button>
+      <a class="btn" style="background:#fff;color:#7c3aed;font-weight:600;padding:10px 18px;border-radius:8px;text-decoration:none" href="#explore">Cari Jasa</a>
+      <a class="btn" style="background:rgba(255,255,255,0.25);color:#fff;border:1px solid #fff;font-weight:600;padding:10px 18px;border-radius:8px;text-decoration:none" href="/creators.html">Cari Creator</a>
+      <button class="btn warn" style="padding:10px 18px;border-radius:8px" onclick="openStore()">Buka Lapak Creator</button>
     </div>
   </div>
 
@@ -56,28 +60,35 @@
 
 <script src="/app.js"></script>
 <script>
-navbar();
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof navbar === 'function') navbar();
+  init();
+});
 
 async function init() {
   const cats = await api('/api/categories').catch(()=>[]);
   const sel = $('#qCat');
-  cats.forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c.id;
-    opt.textContent = c.name;
-    sel.appendChild(opt);
-  });
+  if (sel) {
+    cats.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.name;
+      sel.appendChild(opt);
+    });
+  }
   loadServices();
 }
 
 async function loadServices() {
-  const q = $('#qSearch').value.trim();
-  const cat = $('#qCat').value;
-  const sort = $('#qSort').value;
-  const open = $('#qOpen').checked;
+  const q = $('#qSearch') ? $('#qSearch').value.trim() : '';
+  const cat = $('#qCat') ? $('#qCat').value : '';
+  const sort = $('#qSort') ? $('#qSort').value : '';
+  const open = $('#qOpen') ? $('#qOpen').checked : false;
   const list = await api(`/api/services?search=${encodeURIComponent(q)}&category=${cat}&sort=${sort}&open_only=${open}`).catch(()=>[]);
   
   const el = $('#serviceList');
+  if(!el) return;
+  
   if(!list.length) {
     el.innerHTML = '<p class="muted">Belum ada jasa yang sesuai.</p>';
     return;
@@ -101,8 +112,6 @@ async function loadServices() {
     </div>
   `).join('');
 }
-
-init();
 </script>
 </body>
 </html>
