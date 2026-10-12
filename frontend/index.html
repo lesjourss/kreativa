@@ -11,11 +11,7 @@
 <nav class="nav">
   <div class="nav-inner">
     <a class="logo" href="/">🎨 Kreativa<span>.</span></a>
-    <div class="links" id="navLinks">
-      <a href="/" class="small">Explore</a>
-      <a href="/creators.html" class="small">Cari Creator</a>
-      <a href="/auth.html" class="btn small">Masuk / Daftar</a>
-    </div>
+    <div class="links" id="navLinks"></div>
   </div>
 </nav>
 
@@ -25,7 +21,7 @@
     <p style="margin:0 0 16px 0;opacity:0.9">Portofolio, harga, estimasi & status order transparan — tanpa tanya-tanya via DM lagi. Untuk desainer, ilustrator, videografer, hingga copywriter.</p>
     <div class="row" style="gap:8px">
       <a class="btn" style="background:#fff;color:#7c3aed" href="#explore">Cari Jasa</a>
-      <a class="btn ghost" style="color:#fff;border-color:#fff" href="/creators.html">Cari Creator</a>
+      <a class="btn ghost" style="color:#fff;border:1px solid #fff" href="/creators.html">Cari Creator</a>
       <button class="btn warn" onclick="openStore()">Buka Lapak Creator</button>
     </div>
   </div>
@@ -60,7 +56,6 @@
 
 <script src="/app.js"></script>
 <script>
-// Panggil fungsi navbar otomatis saat halaman dimuat
 navbar();
 
 async function init() {
