@@ -80,7 +80,14 @@ async function submitPay(oid) {
 }
 
 async function cancelOrder(oid) {
-  if (!confirm('Apakah kamu yakin ingin membatalkan pesanan ini?')) return;
+  const ok = await showConfirm({
+    title: 'Batalkan Pesanan',
+    message: 'Apakah kamu yakin ingin membatalkan pesanan ini? Pesanan yang dibatalkan tidak dapat diproses lagi.',
+    confirmText: 'Ya, Batalkan',
+    cancelText: 'Kembali',
+    isDanger: true
+  });
+  if (!ok) return;
   await api('/api/orders/' + oid + '/status', { method: 'PATCH', body: { status: 'dibatalkan' } });
   renderOrders();
 }

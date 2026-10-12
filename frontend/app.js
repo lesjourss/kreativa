@@ -6,6 +6,94 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&
 const rupiah = (n) => 'Rp ' + Number(n||0).toLocaleString('id-ID');
 const fmtDate = (s) => String(s||'').slice(0,16);
 
+// ==========================================
+// CUSTOM POPUP CONFIRMATION & ALERT (MODAL)
+// ==========================================
+function showConfirm({ title = 'Konfirmasi', message = 'Apakah kamu yakin ingin melanjutkan tindakan ini?', confirmText = 'Lanjutkan', cancelText = 'Batal', isDanger = false } = {}) {
+  return new Promise((resolve) => {
+    const existing = $('.modal-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-dialog" role="dialog" aria-modal="true">
+        <h3 class="modal-title">${esc(title)}</h3>
+        <div class="modal-body">${esc(message).replace(/\n/g, '<br>')}</div>
+        <div class="modal-actions">
+          <button type="button" class="btn small ghost" id="modalCancelBtn">${esc(cancelText)}</button>
+          <button type="button" class="btn small ${isDanger ? 'btn-danger' : ''}" id="modalConfirmBtn">${esc(confirmText)}</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('open'));
+
+    const cleanup = (val) => {
+      overlay.classList.remove('open');
+      setTimeout(() => overlay.remove(), 200);
+      document.removeEventListener('keydown', handleKey);
+      resolve(val);
+    };
+
+    const handleKey = (e) => {
+      if (e.key === 'Escape') cleanup(false);
+    };
+
+    overlay.querySelector('#modalCancelBtn').onclick = () => cleanup(false);
+    overlay.querySelector('#modalConfirmBtn').onclick = () => cleanup(true);
+    overlay.onclick = (e) => {
+      if (e.target === overlay) cleanup(false);
+    };
+    document.addEventListener('keydown', handleKey);
+  });
+}
+
+function showAlert(message, { title = 'Pemberitahuan', type = 'info', confirmText = 'Mengerti' } = {}) {
+  return new Promise((resolve) => {
+    const existing = $('.modal-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-dialog" role="dialog" aria-modal="true">
+        <h3 class="modal-title">${esc(title)}</h3>
+        <div class="modal-body" style="color:${type === 'error' ? 'var(--red)' : 'var(--ink)'}">${esc(message).replace(/\n/g, '<br>')}</div>
+        <div class="modal-actions">
+          <button type="button" class="btn small" id="modalAlertOkBtn">${esc(confirmText)}</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('open'));
+
+    const cleanup = () => {
+      overlay.classList.remove('open');
+      setTimeout(() => overlay.remove(), 200);
+      document.removeEventListener('keydown', handleKey);
+      resolve();
+    };
+
+    const handleKey = (e) => {
+      if (e.key === 'Escape' || e.key === 'Enter') cleanup();
+    };
+
+    overlay.querySelector('#modalAlertOkBtn').onclick = cleanup;
+    overlay.onclick = (e) => {
+      if (e.target === overlay) cleanup();
+    };
+    document.addEventListener('keydown', handleKey);
+  });
+}
+
+// Override alert bawaan agar otomatis memakai modal modern tanpa dialog abu-abu browser
+window.alert = (msg) => {
+  showAlert(String(msg ?? ''));
+};
+
 // Client API Helper
 async function api(path, {method='GET', body, token}={}) {
   const t = token || getToken();
@@ -143,7 +231,13 @@ function goBack(){
 }
 
 async function openStore(){
-  if(!confirm('Aktifkan akun creator?\n\nAkunmu akan menjadi akun creator (untuk menjual jasa).')) return;
+  const ok = await showConfirm({
+    title: 'Buka Lapak Creator',
+    message: 'Aktifkan akun creator sekarang? Akunmu akan dapat menjual jasa, mempublikasikan paket layanan, dan menerima pesanan.',
+    confirmText: 'Aktifkan Lapak',
+    cancelText: 'Batal'
+  });
+  if(!ok) return;
   try{
     saveSession(await api('/api/me/become-creator',{method:'POST'}));
     location.href='/dashboard-creator.html#profil';

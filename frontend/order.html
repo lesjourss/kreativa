@@ -122,7 +122,19 @@ async function renderStatus(id){
   ${o.review?`<div class="form-card" style="margin-top:16px"><div class="small muted" style="margin-bottom:4px">Ulasan kamu:</div><div><span class="stars">${'★'.repeat(o.review.rating)}</span> <span style="margin-left:6px">${esc(o.review.comment)}</span></div></div>`:''}`;
   if(location.hash==='#kirim') setTimeout(()=>{const k=$('#kirim'); if(k) k.scrollIntoView();},50);
 }
-async function setStatus(id,s,ask){ if(ask&&!confirm(ask))return; await api('/api/orders/'+id+'/status',{method:'PATCH',body:{status:s}}); renderStatus(id); }
+async function setStatus(id,s,ask){
+  if(ask){
+    const ok = await showConfirm({
+      title: 'Konfirmasi Status Pesanan',
+      message: ask,
+      confirmText: 'Lanjutkan',
+      cancelText: 'Batal'
+    });
+    if(!ok) return;
+  }
+  await api('/api/orders/'+id+'/status',{method:'PATCH',body:{status:s}});
+  renderStatus(id);
+}
 async function sendDelivery(id){ await api('/api/orders/'+id+'/deliveries',{method:'POST',body:{note:$('#dNote').value,file_url:$('#dUrl').value,link_url:$('#dLink').value}}); alert('Hasil berhasil dikirim ke customer!'); renderStatus(id); }
 async function sendRev(id){ await api('/api/orders/'+id+'/revisions',{method:'POST',body:{note:$('#revNote').value}}); renderStatus(id); }
 async function sendReview(id){ await api('/api/orders/'+id+'/review',{method:'POST',body:{rating:+$('#rate').value,comment:$('#comment').value}}); renderStatus(id); }

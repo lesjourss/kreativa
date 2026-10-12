@@ -125,7 +125,14 @@ async function addService(){
   renderJasa();
 }
 async function delService(id){
-  if(!confirm('Hapus layanan ini beserta semua paketnya?')) return;
+  const ok = await showConfirm({
+    title: 'Hapus Layanan',
+    message: 'Apakah kamu yakin ingin menghapus layanan ini beserta seluruh paket layanannya?',
+    confirmText: 'Hapus Layanan',
+    cancelText: 'Batal',
+    isDanger: true
+  });
+  if(!ok) return;
   await api('/api/services/'+id,{method:'DELETE'});
   renderJasa();
 }
@@ -139,7 +146,14 @@ async function addPkg(sid){
   renderJasa();
 }
 async function delPkg(pid){
-  if(!confirm('Hapus paket ini?')) return;
+  const ok = await showConfirm({
+    title: 'Hapus Paket Layanan',
+    message: 'Apakah kamu yakin ingin menghapus paket layanan ini?',
+    confirmText: 'Hapus Paket',
+    cancelText: 'Batal',
+    isDanger: true
+  });
+  if(!ok) return;
   await api('/api/packages/'+pid,{method:'DELETE'});
   renderJasa();
 }
@@ -175,7 +189,14 @@ async function addPorto(){
   renderPortofolio();
 }
 async function delPorto(pid){
-  if(!confirm('Hapus portofolio ini?')) return;
+  const ok = await showConfirm({
+    title: 'Hapus Karya Portofolio',
+    message: 'Apakah kamu yakin ingin menghapus karya portofolio ini dari tokomu?',
+    confirmText: 'Hapus Portofolio',
+    cancelText: 'Batal',
+    isDanger: true
+  });
+  if(!ok) return;
   await api('/api/portfolios/'+pid,{method:'DELETE'});
   renderPortofolio();
 }

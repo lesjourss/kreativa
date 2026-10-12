@@ -117,7 +117,20 @@ async function loadPayments() {
 }
 
 async function verifyOrder(oid, action) {
+  const isApprove = action === 'approve';
+  const ok = await showConfirm({
+    title: isApprove ? 'Setujui Pembayaran Order' : 'Tolak Bukti Pembayaran',
+    message: isApprove 
+      ? 'Apakah kamu yakin ingin menyetujui bukti pembayaran pesanan ini sebagai LUNAS?' 
+      : 'Apakah kamu yakin ingin menolak bukti transfer ini?',
+    confirmText: isApprove ? 'Setujui (Lunas)' : 'Tolak Pembayaran',
+    cancelText: 'Batal',
+    isDanger: !isApprove
+  });
+  if (!ok) return;
+
   await api(`/api/admin/orders/${oid}/verify-payment`, {method:'PATCH', body:{action}});
+  showAlert(isApprove ? 'Pembayaran order disetujui (Lunas)!' : 'Bukti pembayaran order ditolak.');
   loadPayments();
 }
 
@@ -168,8 +181,20 @@ async function loadBoosterPayments() {
 }
 
 async function verifyBooster(bid, action) {
+  const isApprove = action === 'approve';
+  const ok = await showConfirm({
+    title: isApprove ? 'Aktifkan Layanan Booster' : 'Tolak Bukti Transfer',
+    message: isApprove 
+      ? 'Setujui pembayaran QRIS ini dan langsung aktifkan masa eksposur booster untuk creator?' 
+      : 'Tolak bukti transfer pembelian booster ini?',
+    confirmText: isApprove ? 'Setujui & Aktifkan' : 'Tolak Pembayaran',
+    cancelText: 'Batal',
+    isDanger: !isApprove
+  });
+  if (!ok) return;
+
   await api(`/api/admin/boosters/${bid}/verify-payment`, {method:'PATCH', body:{action}});
-  alert(action === 'approve' ? 'Pembayaran booster disetujui & booster telah diaktifkan!' : 'Pembayaran booster ditolak.');
+  showAlert(isApprove ? 'Pembayaran booster disetujui & booster telah diaktifkan!' : 'Pembayaran booster ditolak.');
   loadBoosterPayments();
 }
 
