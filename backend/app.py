@@ -19,7 +19,9 @@ from db import connect as mysql_connect
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-ganti-di-production")
 JWT_EXP_HOURS = int(os.environ.get("JWT_EXP_HOURS", "72"))
-FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
+
+# Karena app.py berada di dalam folder backend/, naik 1 tingkat ke root project
+FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
 
 # Upload file lokal
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
@@ -1290,7 +1292,7 @@ def serve_upload(fname):
     return send_from_directory(UPLOAD_DIR, fname)
 
 
-# ---------- Serve frontend ----------
+# ---------- Serve frontend (static) ----------
 @app.get("/")
 def serve_index():
     return send_from_directory(FRONTEND_DIR, "index.html")
@@ -1300,9 +1302,14 @@ def serve_index():
 def serve_static(filename):
     if filename.startswith("api/"):
         return jsonify({"error": "Not found"}), 404
-    full = os.path.join(FRONTEND_DIR, filename)
-    if os.path.isfile(full):
+    
+    full_path = os.path.join(FRONTEND_DIR, filename)
+    if os.path.isfile(full_path):
         return send_from_directory(FRONTEND_DIR, filename)
+        
+    if os.path.isfile(full_path + ".html"):
+        return send_from_directory(FRONTEND_DIR, filename + ".html")
+        
     return send_from_directory(FRONTEND_DIR, "index.html")
 
 
