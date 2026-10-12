@@ -63,6 +63,7 @@ def ensure_service(creator_id, title, cat, desc, thumb, packages):
 
 
 # users demo
+admin_user = ensure_user("Admin Kreativa", "admin@kreativa.id", "admin", "admin123")
 c1 = ensure_user("Rina Desain", "rina@creator.id", "creator")
 c2 = ensure_user("Bimo Visual", "bimo@creator.id", "creator")
 cust = ensure_user("Tania UMKM", "tania@customer.id", "customer")

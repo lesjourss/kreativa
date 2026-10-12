@@ -237,6 +237,16 @@ def login():
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
     db = get_db()
+
+    # Otomatis buat akun admin default jika belum ada di database
+    if email == "admin@kreativa.id":
+        if db.execute("SELECT id FROM users WHERE email='admin@kreativa.id'").fetchone() is None:
+            db.execute(
+                "INSERT INTO users (name, email, password_hash, role) VALUES (%s,%s,%s,'admin')",
+                ("Admin Kreativa", "admin@kreativa.id", generate_password_hash("admin123")),
+            )
+            db.commit()
+
     row = db.execute("SELECT * FROM users WHERE email=%s", (email,)).fetchone()
     if row is None or not check_password_hash(row["password_hash"], password):
         return jsonify({"error": "Email atau password salah"}), 401
