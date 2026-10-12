@@ -10,15 +10,14 @@
     <div id="fLogin">
       <label>Email</label><input id="lEmail" placeholder="kamu@email.com">
       <label>Password</label><input id="lPass" type="password">
-      <button class="btn" style="margin-top:14px;width:100%" onclick="login()">Masuk</button>
-      <p class="small muted">Demo: rina@creator.id / bimo@creator.id / tania@customer.id — password: password123</p>
+      <button class="btn" style="margin-top:14px;width:100%" onclick="guard(this,login)">Masuk</button>
     </div>
     <div id="fReg" style="display:none">
       <label>Nama</label><input id="rName">
       <label>Email</label><input id="rEmail">
       <label>Password (min 6)</label><input id="rPass" type="password">
-      <label>Role</label><select id="rRole"><option value="customer">Customer</option><option value="creator">Creator</option></select>
-      <button class="btn warn" style="margin-top:14px;width:100%" onclick="reg()">Daftar</button>
+      <label>Daftar sebagai</label><select id="rRole"><option value="customer">Customer — saya mau memesan jasa</option><option value="creator">Creator — saya mau menjual jasa</option></select>
+      <button class="btn warn" style="margin-top:14px;width:100%" onclick="guard(this,reg)">Daftar</button>
     </div>
     <p id="msg" class="small"></p>
   </div>
@@ -27,19 +26,22 @@
 <script>
 navbar();
 const q=new URLSearchParams(location.search); if(q.get('role')){document.querySelector('#rRole').value=q.get('role'); tab('reg');}
-function tab(x){ $('#fLogin').style.display=x==='login'?'block':'none'; $('#fReg').style.display=x==='reg'?'block':'none'; $('#tLogin').classList.toggle('on',x==='login'); $('#tReg').classList.toggle('on',x==='reg'); }
+function tab(x){ $('#msg').textContent=''; $('#fLogin').style.display=x==='login'?'block':'none'; $('#fReg').style.display=x==='reg'?'block':'none'; $('#tLogin').classList.toggle('on',x==='login'); $('#tReg').classList.toggle('on',x==='reg'); }
 async function login(){
+  $('#msg').textContent='';
   try{ const d=await api('/api/auth/login',{method:'POST',body:{email:$('#lEmail').value,password:$('#lPass').value}});
-    localStorage.setItem('token',d.token); localStorage.setItem('user',JSON.stringify(d.user));
-    location.href = d.user.role==='creator'?'/dashboard-creator.html':'/'; }
+    saveSession(d); location.href = d.user.role==='creator'?'/dashboard-creator.html#orders':'/'; }
   catch(e){ $('#msg').textContent=e.message; }
 }
 async function reg(){
+  $('#msg').textContent='';
   try{ const d=await api('/api/auth/register',{method:'POST',body:{name:$('#rName').value,email:$('#rEmail').value,password:$('#rPass').value,role:$('#rRole').value}});
-    localStorage.setItem('token',d.token); localStorage.setItem('user',JSON.stringify(d.user));
-    location.href = d.user.role==='creator'?'/dashboard-creator.html':'/'; }
+    saveSession(d); location.href = d.user.role==='creator'?'/dashboard-creator.html#profil':'/'; }   // creator baru: lengkapi profil toko dulu
   catch(e){ $('#msg').textContent=e.message; }
 }
+// sudah login sebagai customer lalu klik "Buka Lapak Creator": tawarkan aktivasi, bukan daftar ulang
+(function(){ const u=currentUser(); if(u&&u.role==='customer'&&q.get('role')==='creator'){
+  $('#msg').innerHTML='Kamu sudah login sebagai customer. <button class="btn small warn" onclick="openStore()">Aktifkan akun creator</button>'; } })();
 </script>
 </body>
 </html>

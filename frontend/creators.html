@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="id">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cari Creator — Kreativa</title><link rel="stylesheet" href="/styles.css"></head>
+<body>
+<nav class="nav"><div class="nav-inner"><a class="logo" href="/">🎨 Kreativa<span>.</span></a><div class="links" id="navLinks"></div></div></nav>
+<div class="container" style="margin-top:16px"><h2>🔎 Cari Creator</h2>
+  <div class="filters">
+    <input id="q" placeholder="🔍 Nama, keahlian, atau jenis jasa..." oninput="debounce()">
+    <select id="cat" onchange="load()"><option value="">Semua kategori</option></select>
+    <select id="sort" onchange="load()">
+      <option value="boosted">Rekomendasi (promoted → rating)</option><option value="rating">Rating tertinggi</option><option value="popular">Paling banyak review</option>
+      <option value="newest">Creator terbaru</option><option value="price_low">Harga mulai termurah</option><option value="name">Nama A-Z</option></select>
+    <label class="chk"><input type="checkbox" id="openOnly" onchange="load()"> Open saja</label>
+  </div>
+  <p class="small muted" id="count"></p><div class="grid cards" id="list"></div></div>
+<script src="/app.js"></script>
+<script>
+navbar(); let tm, seq=0;
+function debounce(){ clearTimeout(tm); tm=setTimeout(load,350); }
+async function init(){ (await api('/api/categories').catch(()=>[])).forEach(c=>{const o=document.createElement('option');o.value=c.name;o.textContent=c.name;$('#cat').appendChild(o);}); load(); }
+async function load(){
+  const my=++seq, p=new URLSearchParams({search:$('#q').value.trim(),category:$('#cat').value,sort:$('#sort').value,open_only:$('#openOnly').checked?'1':''});
+  const items=await api('/api/creators?'+p).catch(e=>{$('#list').innerHTML='<p>'+esc(e.message)+'</p>';return null;});
+  if(my!==seq||!items) return;
+  $('#count').textContent=items.length+' creator ditemukan';
+  $('#list').innerHTML=items.length?items.map(c=>`<div class="card"><div class="card-body">
+    <div class="row"><img class="avatar" src="${esc(c.avatar_url||'https://i.pravatar.cc/100?u='+c.id)}"><div><h3 style="margin:0"><a href="/store.html?creator=${c.id}">${esc(c.name)}</a></h3>
+    <div class="small muted">⭐ ${c.avg_rating||0} (${c.total_reviews||0} review) • ${c.service_count} jasa</div></div></div>
+    <div class="row" style="margin-top:8px">${c.is_boosted?'<span class="badge boost">⚡ Promoted</span>':''}<span class="badge ${c.availability_status==='closed'?'closed':'open'}">${c.availability_status==='closed'?'🔴 Closed':'🟢 Open'}</span>${c.categories.slice(0,3).map(k=>`<span class="badge plan">${esc(k)}</span>`).join('')}</div>
+    <p class="small muted">${esc(c.bio||'Belum ada bio.')}</p>
+    <div class="row" style="justify-content:space-between"><b>${c.price_from!=null?'Mulai '+rupiah(c.price_from):'—'}</b><a class="btn small" href="/store.html?creator=${c.id}">Lihat toko</a></div></div></div>`).join(''):'<p class="muted">Tidak ada creator yang cocok.</p>';
+}
+init();
+</script>
+</body>
+</html>

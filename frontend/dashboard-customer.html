@@ -18,12 +18,13 @@ async function init(){
       <div class="row" style="justify-content:space-between"><b>Order #${o.id} — ${esc(o.service_title||'')}</b>${statusBadge(o.status)}</div>
       ${timeline(o.status)}
       <p class="small">${esc(o.need_desc)}</p>
-      <div class="row"><a class="btn small" href="/order.html?id=${o.id}">Lihat & Revisi / Review</a>
+      ${o.status==='dikirim'?'<div class="hint">📤 Creator sudah mengirim hasil — periksa lalu setujui atau minta revisi.</div>':''}
+      <div class="row"><a class="btn small ${o.status==='dikirim'?'warn':''}" href="/order.html?id=${o.id}">${o.status==='dikirim'?'Periksa hasil':'Lihat detail'}</a>
       ${o.status==='pending'||o.status==='diterima'?`<button class="btn small ghost" onclick="cancel(${o.id})">Batalkan</button>`:''}</div>
-    </div>`).join(''):'<p>Belum ada pesanan. <a href="/">Cari jasa →</a></p>';
+    </div>`).join(''):'<p>Belum ada pesanan. <a href="/">Cari jasa</a> atau <a href="/creators.html">cari creator →</a></p>';
 }
 async function cancel(id){ if(!confirm('Batalkan order?'))return; try{ await api('/api/orders/'+id+'/status',{method:'PATCH',body:{status:'dibatalkan'}}); init(); }catch(e){ alert(e.message); } }
-init();
+init().catch(e=>{ $('#list').innerHTML='<p>'+esc(e.message)+'</p>'; });
 </script>
 </body>
 </html>

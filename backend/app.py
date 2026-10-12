@@ -24,7 +24,7 @@ FRONTEND_DIR = os.path.join(os.path.dirname(BASE_DIR), "frontend")
 # Upload file lokal (sesuai AGENTS.md: storage boleh lokal untuk tugas)
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 ALLOWED_IMG_EXT = {"jpg", "jpeg", "png", "webp", "gif"}
-MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+MAX_UPLOAD_BYTES = 4 * 1024 * 1024  # Vercel membatasi body request ~4.5MB
 CONTENT_TYPES = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
                  "webp": "image/webp", "gif": "image/gif"}
 
@@ -35,17 +35,51 @@ SUPABASE_BUCKET = os.environ.get("SUPABASE_BUCKET", "uploads")
 
 app = Flask(__name__)
 
-VALID_ORDER_STATUS = ["pending", "diterima", "dikerjakan", "revisi", "selesai", "ditolak", "dibatalkan"]
-# Transisi yang diizinkan (creator-driven, customer bisa minta revisi/batalkan)
+VALID_ORDER_STATUS = ["pending", "diterima", "dikerjakan", "revisi", "dikirim", "selesai", "ditolak", "dibatalkan"]
+# Alur: pending -> diterima -> dikerjakan -> (creator kirim hasil) dikirim
+#       -> customer setujui = selesai, atau minta revisi = revisi -> dikerjakan/dikirim lagi
+# 'dikirim' diisi otomatis lewat POST /api/orders/<id>/deliveries,
+# 'revisi' diisi otomatis lewat POST /api/orders/<id>/revisions.
 ALLOWED_TRANSITIONS = {
     "pending": ["diterima", "ditolak", "dibatalkan"],
     "diterima": ["dikerjakan", "ditolak", "dibatalkan"],
-    "dikerjakan": ["revisi", "selesai"],
-    "revisi": ["dikerjakan", "selesai"],
+    "dikerjakan": ["dikirim"],
+    "revisi": ["dikerjakan", "dikirim"],
+    "dikirim": ["selesai", "revisi"],
     "selesai": [],
     "ditolak": [],
     "dibatalkan": [],
 }
+
+
+SORT_ALIASES = {
+    "": "boosted", "boosted": "boosted", "default": "boosted", "prioritas": "boosted",
+    "rating": "rating", "rating_desc": "rating", "terbaik": "rating", "top": "rating",
+    "newest": "newest", "terbaru": "newest", "latest": "newest", "new": "newest",
+    "price_low": "price_low", "price_asc": "price_low", "termurah": "price_low",
+    "harga_terendah": "price_low", "cheapest": "price_low",
+    "price_high": "price_high", "price_desc": "price_high", "termahal": "price_high",
+    "harga_tertinggi": "price_high",
+    "name": "name", "nama": "name", "popular": "popular", "populer": "popular",
+}
+
+
+def norm_sort(value):
+    return SORT_ALIASES.get((value or "").strip().lower(), "boosted")
+
+
+def clean_url(u):
+    """URL hasil/bukti: hanya http(s) atau path lokal (cegah javascript: dll)."""
+    u = (u or "").strip()
+    if not u:
+        return ""
+    if len(u) > 2000:
+        raise ValueError("URL terlalu panjang")
+    if u.startswith("/") and not u.startswith("//"):
+        return u
+    if u.lower().startswith(("http://", "https://")):
+        return u
+    raise ValueError("URL harus diawali http:// atau https://")
 
 
 # ---------- DB helpers ----------
@@ -133,7 +167,7 @@ def auth_required(f):
             uid = int(data["sub"])
         except (TypeError, ValueError):
             return jsonify({"error": "Token tidak valid"}), 401
-        user = db.execute("SELECT id, name, email, role, avatar_url FROM users WHERE id = %s", (uid,)).fetchone()
+        user = db.execute("SELECT id, name, email, role, avatar_url, created_at FROM users WHERE id = %s", (uid,)).fetchone()
         if user is None:
             return jsonify({"error": "User tidak ditemukan"}), 401
         g.user = row_to_dict(user)
@@ -244,6 +278,54 @@ def update_me():
     return jsonify({"ok": True})
 
 
+@app.patch("/api/me/password")
+@auth_required
+def change_password():
+    data = request.get_json(force=True, silent=True) or {}
+    old = data.get("old_password") or ""
+    new = data.get("new_password") or ""
+    if len(new) < 6:
+        return jsonify({"error": "Password baru minimal 6 karakter"}), 400
+    db = get_db()
+    row = db.execute("SELECT password_hash FROM users WHERE id=%s", (g.user["id"],)).fetchone()
+    if row is None or not check_password_hash(row["password_hash"], old):
+        return jsonify({"error": "Password lama salah"}), 400
+    db.execute("UPDATE users SET password_hash=%s WHERE id=%s",
+               (generate_password_hash(new), g.user["id"]))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/me/become-creator")
+@auth_required
+def become_creator():
+    """Customer membuka lapak: role jadi creator, token baru dikembalikan."""
+    if g.user["role"] != "customer":
+        return jsonify({"error": "Hanya akun customer yang bisa membuka lapak"}), 400
+    db = get_db()
+    db.execute("UPDATE users SET role='creator' WHERE id=%s", (g.user["id"],))
+    if not db.execute("SELECT id FROM creator_profiles WHERE user_id=%s", (g.user["id"],)).fetchone():
+        db.execute("INSERT INTO creator_profiles (user_id, bio) VALUES (%s, '')", (g.user["id"],))
+    db.commit()
+    user = {"id": g.user["id"], "name": g.user["name"], "email": g.user["email"],
+            "role": "creator", "avatar_url": g.user.get("avatar_url") or ""}
+    return jsonify({"token": make_token(user), "user": user})
+
+
+@app.get("/api/packages/<int:pid>")
+def package_info(pid):
+    """Ringkasan paket untuk halaman form pesanan."""
+    db = get_db()
+    p = db.execute(
+        """SELECT sp.id, sp.name, sp.price, sp.estimated_days, sp.revision_count, sp.is_active,
+                  s.id AS service_id, s.title AS service_title, u.name AS creator_name
+           FROM service_packages sp JOIN services s ON s.id=sp.service_id
+           JOIN users u ON u.id=s.creator_id WHERE sp.id=%s""", (pid,)).fetchone()
+    if p is None or not p["is_active"]:
+        return jsonify({"error": "Paket tidak ditemukan / tidak aktif"}), 404
+    return jsonify(row_to_dict(p))
+
+
 # ---------- Kategori ----------
 @app.get("/api/categories")
 def list_categories():
@@ -257,7 +339,13 @@ def list_categories():
 def list_services():
     category = request.args.get("category", "").strip()
     search = request.args.get("search", "").strip()
-    sort = request.args.get("sort", "boosted").strip()
+    sort = norm_sort(request.args.get("sort", "boosted"))
+    open_only = request.args.get("open_only", "").strip().lower() in ("1", "true", "yes", "open")
+    try:
+        min_price = int(request.args.get("min_price")) if request.args.get("min_price") else None
+        max_price = int(request.args.get("max_price")) if request.args.get("max_price") else None
+    except ValueError:
+        return jsonify({"error": "min_price/max_price harus angka"}), 400
     db = get_db()
     boosted_ids = active_booster_service_ids(db)
     boosted_creators = active_booster_creator_ids(db)
@@ -273,30 +361,37 @@ def list_services():
            LEFT JOIN creator_profiles cp ON cp.user_id = s.creator_id
            WHERE 1=1"""
     params = []
-    if category:
+    if category and category.lower() not in ("all", "semua", "0", "null", "undefined"):
         q += " AND (c.name = %s OR CAST(c.id AS TEXT) = %s)"
         params += [category, category]
     if search:
         q += " AND (s.title ILIKE %s OR s.description ILIKE %s OR u.name ILIKE %s)"
         like = f"%{search}%"
         params += [like, like, like]
+    if open_only:
+        q += " AND cp.availability_status = 'open'"
     rows = db.execute(q, params).fetchall()
     out = []
     for r in rows:
         d = row_to_dict(r)
         d["is_boosted"] = (d["id"] in boosted_ids) or (d["creator_id"] in boosted_creators)
+        pf = d.get("price_from")
+        if min_price is not None and (pf is None or pf < min_price):
+            continue
+        if max_price is not None and (pf is None or pf > max_price):
+            continue
         out.append(d)
+    # urutkan: dasar "terbaru" dulu, lalu sort utama (sort Python stabil)
+    out.sort(key=lambda x: x.get("created_at") or "", reverse=True)
     if sort == "rating":
-        out.sort(key=lambda x: (-(x.get("avg_rating") or 0), x["id"]))
-    elif sort == "newest":
-        out.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+        out.sort(key=lambda x: -(x.get("avg_rating") or 0))
     elif sort == "price_low":
         out.sort(key=lambda x: (x.get("price_from") is None, x.get("price_from") or 0))
-    else:  # boosted first, then newest
-        out.sort(key=lambda x: (not x["is_boosted"], x.get("created_at") or ""), reverse=False)
-        # fix: boosted True harus di depan
-        out.sort(key=lambda x: (0 if x["is_boosted"] else 1, x.get("created_at") or ""))
-        out = sorted(out, key=lambda x: (0 if x["is_boosted"] else 1,))
+    elif sort == "price_high":
+        out.sort(key=lambda x: (x.get("price_from") is None, -(x.get("price_from") or 0)))
+    elif sort == "boosted":
+        out.sort(key=lambda x: 0 if x["is_boosted"] else 1)
+    # sort == "newest": sudah terurut
     return jsonify(out)
 
 
@@ -318,6 +413,12 @@ def create_service():
         cat = db.execute("SELECT id FROM service_categories WHERE id=%s", (category_id,)).fetchone()
         if cat is None:
             return jsonify({"error": "Kategori tidak ditemukan"}), 400
+    dup = db.execute(
+        "SELECT id FROM services WHERE creator_id=%s AND title=%s AND created_at > NOW() - INTERVAL '15 seconds'",
+        (g.user["id"], title),
+    ).fetchone()
+    if dup:  # klik ganda / request terkirim dua kali
+        return jsonify({"id": dup["id"], "duplicate": True}), 200
     # creator closed tetap boleh tambah jasa, tapi tidak bisa diorder (dicek saat order)
     cur = db.execute(
         "INSERT INTO services (creator_id, category_id, title, description, thumbnail_url) VALUES (%s,%s,%s,%s,%s)",
@@ -500,6 +601,68 @@ def delete_package(pid):
     return jsonify({"ok": True})
 
 
+# ---------- Pencarian / daftar creator ----------
+@app.get("/api/creators")
+def list_creators():
+    search = request.args.get("search", "").strip()
+    category = request.args.get("category", "").strip()
+    sort = norm_sort(request.args.get("sort", "boosted"))
+    open_only = request.args.get("open_only", "").strip().lower() in ("1", "true", "yes", "open")
+    db = get_db()
+    q = """SELECT u.id, u.name, u.avatar_url, u.created_at,
+                  cp.bio, cp.avg_rating, cp.total_reviews, cp.availability_status,
+                  (SELECT COUNT(*) FROM services s WHERE s.creator_id = u.id) AS service_count,
+                  (SELECT MIN(sp.price) FROM service_packages sp
+                     JOIN services s ON s.id = sp.service_id
+                    WHERE s.creator_id = u.id AND sp.is_active = 1) AS price_from
+           FROM users u LEFT JOIN creator_profiles cp ON cp.user_id = u.id
+           WHERE u.role = 'creator'"""
+    params = []
+    if search:
+        q += """ AND (u.name ILIKE %s OR cp.bio ILIKE %s OR EXISTS (
+                   SELECT 1 FROM services s WHERE s.creator_id = u.id
+                   AND (s.title ILIKE %s OR s.description ILIKE %s)))"""
+        like = f"%{search}%"
+        params += [like, like, like, like]
+    if category and category.lower() not in ("all", "semua", "0", "null", "undefined"):
+        q += """ AND EXISTS (SELECT 1 FROM services s
+                   LEFT JOIN service_categories c ON c.id = s.category_id
+                   WHERE s.creator_id = u.id AND (c.name = %s OR CAST(c.id AS TEXT) = %s))"""
+        params += [category, category]
+    if open_only:
+        q += " AND cp.availability_status = 'open'"
+    rows = db.execute(q, params).fetchall()
+    creators = [row_to_dict(r) for r in rows]
+    ids = [c["id"] for c in creators]
+    cats = {}
+    if ids:
+        for r in db.execute(
+            """SELECT DISTINCT s.creator_id, c.name FROM services s
+               JOIN service_categories c ON c.id = s.category_id
+               WHERE s.creator_id = ANY(%s)""", (ids,)).fetchall():
+            cats.setdefault(r["creator_id"], []).append(r["name"])
+    boosted = active_booster_creator_ids(db)
+    for c in creators:
+        c["categories"] = sorted(cats.get(c["id"], []))
+        c["is_boosted"] = c["id"] in boosted
+        bio = c.get("bio") or ""
+        c["bio"] = bio if len(bio) <= 200 else bio[:197] + "..."
+    creators.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    if sort == "name":
+        creators.sort(key=lambda x: (x.get("name") or "").lower())
+    elif sort == "popular":
+        creators.sort(key=lambda x: -(x.get("total_reviews") or 0))
+    elif sort in ("rating", "boosted"):
+        creators.sort(key=lambda x: (-(x.get("avg_rating") or 0), -(x.get("total_reviews") or 0)))
+        if sort == "boosted":
+            creators.sort(key=lambda x: 0 if x["is_boosted"] else 1)
+    elif sort == "price_low":
+        creators.sort(key=lambda x: (x.get("price_from") is None, x.get("price_from") or 0))
+    elif sort == "price_high":
+        creators.sort(key=lambda x: (x.get("price_from") is None, -(x.get("price_from") or 0)))
+    return jsonify(creators)
+
+
 # ---------- Epic 2: Creator store & portfolio ----------
 @app.get("/api/creators/<int:cid>/store")
 def creator_store(cid):
@@ -613,6 +776,13 @@ def create_portfolio():
     if len(image_url) > 2000:
         return jsonify({"error": "URL gambar terlalu panjang"}), 400
     db = get_db()
+    dup = db.execute(
+        "SELECT id FROM portfolios WHERE creator_id=%s AND image_url=%s AND title=%s "
+        "AND created_at > NOW() - INTERVAL '15 seconds'",
+        (g.user["id"], image_url, title),
+    ).fetchone()
+    if dup:  # klik ganda / request terkirim dua kali
+        return jsonify({"id": dup["id"], "duplicate": True}), 200
     cur = db.execute(
         "INSERT INTO portfolios (creator_id, image_url, title, description) VALUES (%s,%s,%s,%s)",
         (g.user["id"], image_url, title, description),
@@ -724,8 +894,23 @@ def order_detail(oid):
     if g.user["role"] != "admin" and g.user["id"] not in (o["customer_id"], o["creator_id"]):
         return jsonify({"error": "Bukan order milikmu"}), 403
     d = row_to_dict(o)
+    info = db.execute(
+        """SELECT cu.name AS customer_name, cr.name AS creator_name,
+                  s.title AS service_title, sp.name AS package_name,
+                  sp.revision_count AS package_revision_count, sp.estimated_days AS package_estimated_days
+           FROM orders o
+           JOIN users cu ON cu.id = o.customer_id
+           JOIN users cr ON cr.id = o.creator_id
+           LEFT JOIN services s ON s.id = o.service_id
+           LEFT JOIN service_packages sp ON sp.id = o.service_package_id
+           WHERE o.id = %s""", (oid,)).fetchone()
+    if info:
+        d.update(row_to_dict(info))
     revs = db.execute("SELECT * FROM revisions WHERE order_id=%s ORDER BY created_at", (oid,)).fetchall()
     d["revisions"] = [row_to_dict(r) for r in revs]
+    d["revisions_used"] = len([r for r in revs if r["requested_by"] == o["customer_id"]])
+    dels = db.execute("SELECT * FROM deliveries WHERE order_id=%s ORDER BY created_at", (oid,)).fetchall()
+    d["deliveries"] = [row_to_dict(x) for x in dels]
     rev = db.execute("SELECT * FROM reviews WHERE order_id=%s", (oid,)).fetchone()
     d["review"] = row_to_dict(rev)
     return jsonify(d)
@@ -750,12 +935,16 @@ def update_order_status(oid):
     if new_status not in ALLOWED_TRANSITIONS.get(cur_status, []):
         return jsonify({"error": f"Tidak bisa pindah dari {cur_status} ke {new_status}"}), 400
     # Aturan peran:
-    if is_customer and not is_creator:
-        # customer hanya boleh batalkan saat pending/diterima, atau minta revisi (via endpoint revisi)
-        if new_status not in ("dibatalkan",):
-            return jsonify({"error": "Customer hanya bisa membatalkan order. Minta revisi lewat tombol Revisi."}), 403
-    if is_creator and new_status == "dibatalkan":
-        return jsonify({"error": "Creator tidak bisa membatalkan; gunakan status ditolak"}), 400
+    if g.user["role"] != "admin":
+        if is_customer:
+            # customer: batalkan (pending/diterima) atau setujui hasil (dikirim -> selesai)
+            if new_status not in ("dibatalkan", "selesai"):
+                return jsonify({"error": "Customer hanya bisa membatalkan order atau menyetujui hasil. Minta revisi lewat tombol Revisi."}), 403
+        else:
+            if new_status == "dibatalkan":
+                return jsonify({"error": "Creator tidak bisa membatalkan; gunakan status ditolak"}), 400
+            if new_status in ("dikirim", "selesai", "revisi"):
+                return jsonify({"error": "Kirim hasil lewat tombol Kirim Hasil. Order diselesaikan customer setelah menyetujui hasil."}), 403
     db.execute("UPDATE orders SET status=%s, updated_at=%s WHERE id=%s", (new_status, now_str(), oid))
     db.commit()
     return jsonify({"ok": True, "status": new_status})
@@ -766,31 +955,33 @@ def update_order_status(oid):
 def add_revision(oid):
     data = request.get_json(force=True, silent=True) or {}
     note = (data.get("note") or "").strip()
-    file_url = (data.get("file_url") or "").strip()
+    try:
+        file_url = clean_url(data.get("file_url"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     if len(note) < 3:
-        return jsonify({"error": "Catatan revisi minimal 3 karakter"}), 400
+        return jsonify({"error": "Jelaskan bagian yang perlu direvisi (minimal 3 karakter)"}), 400
     db = get_db()
     o = db.execute("SELECT * FROM orders WHERE id=%s", (oid,)).fetchone()
     if o is None:
         return jsonify({"error": "Order tidak ditemukan"}), 404
-    if g.user["id"] not in (o["customer_id"], o["creator_id"]) and g.user["role"] != "admin":
+    is_customer = g.user["id"] == o["customer_id"]
+    if not is_customer and g.user["role"] != "admin":
+        if g.user["id"] == o["creator_id"]:
+            return jsonify({"error": "Revisi diminta oleh customer setelah menerima hasil"}), 403
         return jsonify({"error": "Bukan order milikmu"}), 403
-    if o["status"] in ("selesai", "ditolak", "dibatalkan"):
-        return jsonify({"error": "Order sudah final, tidak bisa revisi"}), 400
-    # batasi jumlah revisi customer sesuai paket? cek jumlah revisi oleh customer
-    if g.user["id"] == o["customer_id"]:
-        pkg = db.execute("SELECT revision_count FROM service_packages WHERE id=%s", (o["service_package_id"],)).fetchone()
-        used = db.execute("SELECT COUNT(*) AS c FROM revisions WHERE order_id=%s AND requested_by=%s",
-                          (oid, o["customer_id"])).fetchone()["c"]
-        if pkg and used >= (pkg["revision_count"] or 0):
-            return jsonify({"error": f"Kuota revisi paket habis ({pkg['revision_count']}x)"}), 400
+    if o["status"] != "dikirim":
+        return jsonify({"error": "Revisi hanya bisa diminta setelah creator mengirim hasil"}), 400
+    pkg = db.execute("SELECT revision_count FROM service_packages WHERE id=%s", (o["service_package_id"],)).fetchone()
+    used = db.execute("SELECT COUNT(*) AS c FROM revisions WHERE order_id=%s AND requested_by=%s",
+                      (oid, o["customer_id"])).fetchone()["c"]
+    if pkg and used >= (pkg["revision_count"] or 0):
+        return jsonify({"error": f"Kuota revisi paket habis ({pkg['revision_count']}x). Setujui hasil atau hubungi creator."}), 400
     cur = db.execute(
         "INSERT INTO revisions (order_id, requested_by, note, file_url) VALUES (%s,%s,%s,%s)",
         (oid, g.user["id"], note, file_url),
     )
-    # setiap ada revisi, status jadi 'revisi' (kecuali masih pending)
-    if o["status"] in ("diterima", "dikerjakan", "revisi"):
-        db.execute("UPDATE orders SET status='revisi', updated_at=%s WHERE id=%s", (now_str(), oid))
+    db.execute("UPDATE orders SET status='revisi', updated_at=%s WHERE id=%s", (now_str(), oid))
     db.commit()
     return jsonify({"id": cur.lastrowid, "status": "revisi"}), 201
 
@@ -805,6 +996,52 @@ def list_revisions(oid):
     if g.user["id"] not in (o["customer_id"], o["creator_id"]) and g.user["role"] != "admin":
         return jsonify({"error": "Bukan order milikmu"}), 403
     rows = db.execute("SELECT * FROM revisions WHERE order_id=%s ORDER BY created_at", (oid,)).fetchall()
+    return jsonify([row_to_dict(r) for r in rows])
+
+
+# ---------- Kirim hasil pekerjaan (creator -> customer) ----------
+@app.post("/api/orders/<int:oid>/deliveries")
+@auth_required
+@role_required("creator")
+def add_delivery(oid):
+    data = request.get_json(force=True, silent=True) or {}
+    note = (data.get("note") or "").strip()
+    try:
+        file_url = clean_url(data.get("file_url"))
+        link_url = clean_url(data.get("link_url"))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    if len(note) > 5000:
+        return jsonify({"error": "Catatan maksimal 5000 karakter"}), 400
+    if not file_url and not link_url:
+        return jsonify({"error": "Lampirkan file hasil (JPG/PNG) atau link hasil (Drive/Dropbox/dll)"}), 400
+    db = get_db()
+    o = db.execute("SELECT * FROM orders WHERE id=%s", (oid,)).fetchone()
+    if o is None:
+        return jsonify({"error": "Order tidak ditemukan"}), 404
+    if o["creator_id"] != g.user["id"] and g.user["role"] != "admin":
+        return jsonify({"error": "Bukan order milikmu"}), 403
+    if o["status"] not in ("diterima", "dikerjakan", "revisi"):
+        return jsonify({"error": f"Hasil hanya bisa dikirim saat order diterima/dikerjakan/revisi (sekarang: {o['status']})"}), 400
+    cur = db.execute(
+        "INSERT INTO deliveries (order_id, creator_id, note, file_url, link_url) VALUES (%s,%s,%s,%s,%s)",
+        (oid, o["creator_id"], note, file_url, link_url),
+    )
+    db.execute("UPDATE orders SET status='dikirim', updated_at=%s WHERE id=%s", (now_str(), oid))
+    db.commit()
+    return jsonify({"id": cur.lastrowid, "status": "dikirim"}), 201
+
+
+@app.get("/api/orders/<int:oid>/deliveries")
+@auth_required
+def list_deliveries(oid):
+    db = get_db()
+    o = db.execute("SELECT * FROM orders WHERE id=%s", (oid,)).fetchone()
+    if o is None:
+        return jsonify({"error": "Order tidak ditemukan"}), 404
+    if g.user["id"] not in (o["customer_id"], o["creator_id"]) and g.user["role"] != "admin":
+        return jsonify({"error": "Bukan order milikmu"}), 403
+    rows = db.execute("SELECT * FROM deliveries WHERE order_id=%s ORDER BY created_at", (oid,)).fetchall()
     return jsonify([row_to_dict(r) for r in rows])
 
 
@@ -945,7 +1182,7 @@ def upload_image():
     if not data:
         return jsonify({"error": "File kosong"}), 400
     if len(data) > MAX_UPLOAD_BYTES:
-        return jsonify({"error": "Ukuran maksimal 5MB"}), 400
+        return jsonify({"error": "Ukuran maksimal 4MB (kecilkan foto dulu)"}), 400
     fname = f"{uuid.uuid4().hex}.{ext}"
 
     # Mode cloud: simpan ke Supabase Storage (bucket public)

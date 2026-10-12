@@ -16,22 +16,25 @@
     <p>Portofolio, harga, estimasi & status order transparan — tanpa tanya-tanya via DM lagi. Untuk desainer, ilustrator, videografer, hingga copywriter.</p>
     <div class="row" style="margin-top:14px">
       <a class="btn warn" href="#explore">Cari Jasa</a>
-      <a class="btn ghost" href="/auth.html?role=creator">Buka Lapak Creator</a>
+      <a class="btn ghost" href="/creators.html">Cari Creator</a>
+      <button class="btn ghost" onclick="joinCreator()">Buka Lapak Creator</button>
     </div>
   </div>
 
   <h2 id="explore">Explore Jasa</h2>
   <div class="filters">
-    <input id="q" placeholder="🔍 Cari jasa / creator...">
-    <select id="cat"><option value="">Semua kategori</option></select>
-    <select id="sort">
+    <input id="q" placeholder="🔍 Cari jasa / creator..." oninput="debounce()">
+    <select id="cat" onchange="load()"><option value="">Semua kategori</option></select>
+    <select id="sort" onchange="load()">
       <option value="boosted">Prioritas: Boosted dulu</option>
       <option value="newest">Terbaru</option>
       <option value="rating">Rating tertinggi</option>
       <option value="price_low">Harga termurah</option>
     </select>
+    <label class="chk"><input type="checkbox" id="openOnly" onchange="load()"> Open saja</label>
     <button class="btn small" onclick="load()">Cari</button>
   </div>
+  <p class="small muted" id="count"></p>
   <div class="grid cards" id="list"></div>
 
   <h2 style="margin-top:32px">Kenapa Kreativa?</h2>
@@ -52,10 +55,15 @@ async function init(){
   load();
   $('#q').addEventListener('keydown',e=>{ if(e.key==='Enter') load(); });
 }
+let tm, seq=0;
+function debounce(){ clearTimeout(tm); tm=setTimeout(load,350); }
+function joinCreator(){ const u=currentUser(); if(!u) location.href='/auth.html?role=creator'; else if(u.role==='customer') openStore(); else location.href='/dashboard-creator.html#orders'; }
 async function load(){
-  const q=$('#q').value, cat=$('#cat').value, sort=$('#sort').value;
-  const params=new URLSearchParams({search:q, category:cat, sort});
-  const items=await api('/api/services?'+params).catch(e=>{ $('#list').innerHTML='<p>'+e.message+'</p>'; return []; });
+  const my=++seq;   // abaikan respons lama kalau ada pencarian yang lebih baru
+  const params=new URLSearchParams({search:$('#q').value.trim(), category:$('#cat').value, sort:$('#sort').value, open_only:$('#openOnly').checked?'1':''});
+  const items=await api('/api/services?'+params).catch(e=>{ $('#list').innerHTML='<p>'+esc(e.message)+'</p>'; return null; });
+  if(my!==seq || !items) return;
+  $('#count').textContent=items.length+' jasa ditemukan';
   $('#list').innerHTML = items.length ? items.map(s=>`
     <div class="card">
       <img class="thumb" src="${esc(s.thumbnail_url||'https://picsum.photos/seed/'+s.id+'/600/400')}" loading="lazy" onerror="this.onerror=null;this.src='https://picsum.photos/seed/kreativa-${s.id}/600/400'">

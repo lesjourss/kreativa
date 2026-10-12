@@ -62,7 +62,9 @@ function render(data, highlightService){
 }
 function order(packageId, open){
   if(!open){ alert('Creator sedang Closed for order'); return; }
-  if(!currentUser()){ location.href='/auth.html'; return; }
+  const u=currentUser();
+  if(!u){ location.href='/auth.html'; return; }
+  if(u.role!=='customer'){ alert('Akun creator tidak bisa memesan jasa. Gunakan akun customer.'); return; }
   location.href='/order.html?package='+packageId;
 }
 init();

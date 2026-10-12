@@ -1,59 +1,108 @@
 <!doctype html>
 <html lang="id">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Order & Status — Kreativa</title><link rel="stylesheet" href="/styles.css"></head>
+<title>Order — Kreativa</title><link rel="stylesheet" href="/styles.css"></head>
 <body>
 <nav class="nav"><div class="nav-inner"><a class="logo" href="/">🎨 Kreativa<span>.</span></a><div class="links" id="navLinks"></div></div></nav>
-<div class="container" id="wrap" style="margin-top:16px"><p>Memuat...</p></div>
+<div class="container" id="wrap" style="margin-top:16px;max-width:760px"><p>Memuat...</p></div>
 <script src="/app.js"></script>
 <script>
 navbar();
 const params=new URLSearchParams(location.search);
 async function init(){
-  if(params.get('package')) return renderBrief(params.get('package'));
-  if(params.get('id')) return renderStatus(params.get('id'));
-  $('#wrap').innerHTML='<p>Parameter tidak valid.</p>';
+  try{
+    if(params.get('package')) return await renderBrief(params.get('package'));
+    if(params.get('id')) return await renderStatus(params.get('id'));
+    $('#wrap').innerHTML='<p>Parameter tidak valid.</p>';
+  }catch(e){ $('#wrap').innerHTML='<p>'+esc(e.message)+'</p>'; }
 }
+// ---------- Form brief (customer) ----------
 async function renderBrief(pkgId){
-  // ambil info paket via detail service: cari di semua services (sederhana: tampilkan form langsung)
-  $('#wrap').innerHTML=`<div class="form-card" style="max-width:640px">
-    <h2>📝 Form Brief Terstruktur</h2>
-    <p class="small muted">Jelaskan kebutuhanmu serapi mungkin agar creator langsung paham.</p>
-    <label>Kebutuhan / deskripsi (min 10 karakter)</label><textarea id="need" rows="4" placeholder="Contoh: butuh logo coffeeshop modern, earth tone..."></textarea>
+  if(!requireAuth('customer')) return;
+  const p=await api('/api/packages/'+pkgId);
+  $('#wrap').innerHTML=`<div class="form-card">
+    <h2>📝 Form Pesanan</h2>
+    <div class="hint"><b>${esc(p.service_title)}</b> — paket <b>${esc(p.name)}</b><br>oleh ${esc(p.creator_name)}<br><b>${rupiah(p.price)}</b> • ⏱ ${p.estimated_days} hari • 🔁 ${p.revision_count}x revisi</div>
+    <label>Apa yang kamu butuhkan? (min 10 karakter)</label><textarea id="need" rows="4" placeholder="Contoh: butuh logo coffeeshop modern, nuansa earth tone..."></textarea>
     <label>Link referensi (opsional)</label><input id="ref" placeholder="https://...">
-    <label>Format output</label><input id="fmt" placeholder="PNG + AI / MP4 / JPG...">
-    <label>Deadline</label><input id="dl" type="date">
+    <label>Format hasil yang diinginkan</label><input id="fmt" placeholder="PNG, JPG, MP4...">
+    <label>Deadline (opsional)</label><input id="dl" type="date" min="${new Date().toISOString().slice(0,10)}">
     <label>Catatan tambahan</label><textarea id="note" rows="2"></textarea>
-    <button class="btn" style="margin-top:12px" onclick="submitOrder(${pkgId})">Kirim Order</button>
-    <p id="msg" class="small"></p></div>`;
+    <button class="btn" style="margin-top:12px" onclick="guard(this,()=>submitOrder(${p.id}))">Kirim Pesanan</button></div>`;
 }
 async function submitOrder(pkgId){
-  try{
-    const d=await api('/api/orders',{method:'POST',body:{service_package_id:pkgId,need_desc:$('#need').value,reference_link:$('#ref').value,output_format:$('#fmt').value,deadline:$('#dl').value,note:$('#note').value}});
-    location.href='/order.html?id='+d.id;
-  }catch(e){ $('#msg').textContent=e.message; }
+  const d=await api('/api/orders',{method:'POST',body:{service_package_id:+pkgId,need_desc:$('#need').value,reference_link:$('#ref').value,output_format:$('#fmt').value,deadline:$('#dl').value,note:$('#note').value}});
+  location.href='/order.html?id='+d.id;
+}
+// ---------- Detail order ----------
+function nextHint(o,isCust,isCr){
+  const m={
+    pending:isCr?'Terima atau tolak pesanan ini.':'Menunggu creator menerima pesananmu.',
+    diterima:isCr?'Mulai kerjakan, lalu kirim hasilnya lewat form "Kirim hasil" di bawah.':'Creator sudah menerima. Pengerjaan akan segera dimulai.',
+    dikerjakan:isCr?'Setelah selesai, kirim hasilnya lewat form "Kirim hasil" di bawah.':'Creator sedang mengerjakan pesananmu.',
+    revisi:isCr?'Customer meminta revisi. Perbaiki lalu kirim hasil baru.':'Permintaan revisimu sudah dikirim. Menunggu hasil perbaikan dari creator.',
+    dikirim:isCust?'Hasil sudah dikirim! Periksa di bawah, lalu setujui atau minta revisi.':'Hasil sudah dikirim. Menunggu customer menyetujui.',
+    selesai:'Order selesai. Terima kasih! 🎉',ditolak:'Order ditolak oleh creator.',dibatalkan:'Order dibatalkan.'};
+  return m[o.status]||'';
 }
 async function renderStatus(id){
-  const o=await api('/api/orders/'+id);
-  const u=currentUser();
+  const o=await api('/api/orders/'+id), u=currentUser();
+  const isCust=u&&u.id===o.customer_id, isCr=u&&u.id===o.creator_id;
+  const last=o.deliveries.length?o.deliveries[o.deliveries.length-1].id:null;
+  const left=Math.max(0,(o.package_revision_count||0)-o.revisions_used);
+  const sb=(s,l,c='ghost')=>`<button class="btn small ${c}" onclick="guard(this,()=>setStatus(${o.id},'${s}'))">${l}</button>`;
+  let act='';
+  if(isCr){
+    if(o.status==='pending') act+=sb('diterima','Terima pesanan','')+sb('ditolak','Tolak');
+    if(o.status==='diterima') act+=sb('dikerjakan','Mulai kerjakan','');
+    if(o.status==='revisi') act+=sb('dikerjakan','Mulai kerjakan revisi','');
+  }
+  if(isCust&&['pending','diterima'].includes(o.status)) act+=sb('dibatalkan','Batalkan pesanan');
   $('#wrap').innerHTML=`<div class="form-card">
-    <h2>📦 Order #${o.id}</h2>${statusBadge(o.status)}${timeline(o.status)}
-    <p><b>Kebutuhan:</b> ${esc(o.need_desc)}</p>
-    <p class="small muted">Ref: ${esc(o.reference_link||'-')} • Format: ${esc(o.output_format||'-')} • Deadline: ${esc(o.deadline||'-')} • Harga: Rp ${Number(o.price_snapshot).toLocaleString('id-ID')}</p>
-    <h4>Riwayat revisi (${o.revisions.length})</h4>
-    ${o.revisions.map(r=>`<div class="small" style="border-left:3px solid var(--accent);padding:6px 10px;margin:6px 0">📎 ${esc(r.note)} <span class="muted">(${r.created_at})</span></div>`).join('')||'<p class="small muted">Belum ada revisi.</p>'}
-    <div class="row">
-      ${u&&u.id===o.customer_id&&o.status!=='selesai'?`<input id="revNote" placeholder="Catatan revisi..." style="flex:1;min-width:200px"><button class="btn small warn" onclick="sendRev(${o.id})">Minta Revisi</button>`:''}
-    </div>
-    ${o.status==='selesai'&&u&&u.id===o.customer_id&&!o.review?`
-      <h4>⭐ Beri rating</h4>
-      <div class="row"><select id="rate" style="width:120px"><option value="5">★★★★★</option><option value="4">★★★★</option><option value="3">★★★</option><option value="2">★★</option><option value="1">★</option></select>
-      <input id="comment" placeholder="Komentar..." style="flex:1"><button class="btn small" onclick="sendReview(${o.id})">Kirim</button></div>`:''}
-    ${o.review?`<p class="small">Review kamu: <span class="stars">${'★'.repeat(o.review.rating)}</span> ${esc(o.review.comment)}</p>`:''}
-    <p id="msg" class="small"></p></div>`;
+    <h2>📦 Order #${o.id} ${statusBadge(o.status)}</h2>
+    <div class="small muted">${esc(o.service_title||'')} / ${esc(o.package_name||'')} • ${isCust?'Creator: '+esc(o.creator_name):'Customer: '+esc(o.customer_name)} • ${rupiah(o.price_snapshot)}</div>
+    ${timeline(o.status)}
+    <div class="hint">👉 ${nextHint(o,isCust,isCr)}</div>
+    ${act?`<div class="row" style="margin:10px 0">${act}</div>`:''}
+    <h4>Brief pesanan</h4>
+    <p>${esc(o.need_desc)}</p>
+    <p class="small muted">Referensi: ${esc(o.reference_link||'-')} • Format: ${esc(o.output_format||'-')} • Deadline: ${esc(o.deadline||'-')}${o.note?' • Catatan: '+esc(o.note):''}</p>
+  </div>
+
+  ${isCr&&['diterima','dikerjakan','revisi'].includes(o.status)?`<div class="form-card" id="kirim" style="margin-top:14px"><h3>📤 Kirim hasil ke customer</h3>
+    <p class="small muted">Customer akan melihat hasilnya di halaman ini, lalu menyetujui atau meminta revisi.</p>
+    <label>Pesan untuk customer</label><textarea id="dNote" rows="3" placeholder="Contoh: Ini hasil logonya, file lengkap ada di link Drive."></textarea>
+    <label>Foto / gambar hasil (JPG/PNG)</label>
+    <div class="row"><input type="file" id="dFile" accept=".jpg,.jpeg,.png,.webp,.gif" style="flex:1" onchange="pickUpload('dFile','dUrl','dMsg')"><span class="small muted" id="dMsg"></span></div>
+    <img id="dUrlPrev" class="prev"><input id="dUrl" type="hidden">
+    <label>Atau link hasil (Google Drive / Dropbox — untuk video & file besar)</label><input id="dLink" placeholder="https://drive.google.com/...">
+    <p class="small muted">Isi minimal salah satu: gambar atau link.</p>
+    <button class="btn warn" onclick="guard(this,()=>sendDelivery(${o.id}))">📤 Kirim hasil</button></div>`:''}
+
+  ${o.deliveries.length?`<h3 style="margin-top:18px">📤 Hasil dari creator (${o.deliveries.length})</h3>`+[...o.deliveries].reverse().map(d=>`<div class="form-card" style="margin:8px 0;${d.id===last?'outline:2px solid var(--accent)':''}">
+    <div class="small muted">${fmtDate(d.created_at)} ${d.id===last?'• <b>Terbaru</b>':''}</div>
+    ${d.note?`<p>${esc(d.note)}</p>`:''}
+    ${d.file_url?`<a href="${esc(d.file_url)}" target="_blank" rel="noopener"><img src="${esc(d.file_url)}" class="result"></a>`:''}
+    ${d.link_url?`<p><a class="btn small ghost" href="${esc(d.link_url)}" target="_blank" rel="noopener noreferrer">🔗 Buka link hasil</a></p>`:''}</div>`).join(''):''}
+
+  ${isCust&&o.status==='dikirim'?`<div class="form-card" style="margin-top:14px"><h3>Bagaimana hasilnya?</h3>
+    <button class="btn" onclick="guard(this,()=>setStatus(${o.id},'selesai','Setujui hasil dan selesaikan order?'))">✅ Setujui & selesaikan</button>
+    <hr>${left>0?`<label>Minta revisi (sisa jatah: <b>${left}</b> dari ${o.package_revision_count}x)</label>
+      <textarea id="revNote" rows="2" placeholder="Jelaskan bagian yang perlu diperbaiki..."></textarea>
+      <button class="btn small warn" style="margin-top:8px" onclick="guard(this,()=>sendRev(${o.id}))">🔁 Minta revisi</button>`:'<p class="small muted">Jatah revisi paket ini sudah habis. Setujui hasil, atau hubungi creator.</p>'}</div>`:''}
+
+  ${o.revisions.length?`<h3 style="margin-top:18px">🔁 Riwayat revisi (${o.revisions.length})</h3>`+o.revisions.map(r=>`<div class="small" style="border-left:3px solid var(--accent);padding:6px 10px;margin:6px 0">${esc(r.note)} <span class="muted">(${fmtDate(r.created_at)})</span></div>`).join(''):''}
+
+  ${o.status==='selesai'&&isCust&&!o.review?`<div class="form-card" style="margin-top:14px"><h3>⭐ Beri rating</h3>
+    <div class="row"><select id="rate" style="width:120px"><option value="5">★★★★★</option><option value="4">★★★★</option><option value="3">★★★</option><option value="2">★★</option><option value="1">★</option></select>
+    <input id="comment" placeholder="Komentar..." style="flex:1"><button class="btn small" onclick="guard(this,()=>sendReview(${o.id}))">Kirim</button></div></div>`:''}
+  ${o.review?`<p class="small">Review: <span class="stars">${'★'.repeat(o.review.rating)}</span> ${esc(o.review.comment)}</p>`:''}`;
+  if(location.hash==='#kirim') setTimeout(()=>{const k=$('#kirim'); if(k) k.scrollIntoView();},50);
 }
-async function sendRev(id){ try{ await api('/api/orders/'+id+'/revisions',{method:'POST',body:{note:$('#revNote').value}}); location.reload(); }catch(e){ $('#msg').textContent=e.message; } }
-async function sendReview(id){ try{ await api('/api/orders/'+id+'/review',{method:'POST',body:{rating:+$('#rate').value,comment:$('#comment').value}}); location.reload(); }catch(e){ $('#msg').textContent=e.message; } }
+async function setStatus(id,s,ask){ if(ask&&!confirm(ask))return; await api('/api/orders/'+id+'/status',{method:'PATCH',body:{status:s}}); renderStatus(id); }
+async function sendDelivery(id){ await api('/api/orders/'+id+'/deliveries',{method:'POST',body:{note:$('#dNote').value,file_url:$('#dUrl').value,link_url:$('#dLink').value}}); alert('Hasil terkirim ke customer!'); renderStatus(id); }
+async function sendRev(id){ await api('/api/orders/'+id+'/revisions',{method:'POST',body:{note:$('#revNote').value}}); renderStatus(id); }
+async function sendReview(id){ await api('/api/orders/'+id+'/review',{method:'POST',body:{rating:+$('#rate').value,comment:$('#comment').value}}); renderStatus(id); }
 init();
 </script>
 </body>
