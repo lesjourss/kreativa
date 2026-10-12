@@ -182,45 +182,122 @@ async function delPorto(pid){
 
 // ===== TAB 4: BOOSTER =====
 async function renderBooster(){
-  const [plans, mine] = await Promise.all([api('/api/booster/plans'), api('/api/booster/mine')]);
+  const [plans, mine, qrisRes] = await Promise.all([
+    api('/api/booster/plans'), 
+    api('/api/booster/mine'),
+    api('/api/qris').catch(()=>({}))
+  ]);
   const services = await api('/api/creators/'+me.id+'/store').then(d=>d.services);
   const active = mine.filter(b=>b.payment_status==='paid' && new Date(b.end_date)>new Date());
+  const verifying = mine.filter(b=>b.payment_status==='verifying');
+  const qrisUrl = qrisRes?.qris_image_url;
+
   $('#view').innerHTML = `
-    ${active.length?`<div class="hint"><b>${active.length}</b> paket booster sedang aktif pada tokomu.</div>`:''}
-    <h3 style="margin:20px 0 12px">Paket Booster Tersedia</h3>
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px">
+    ${active.length?`<div class="hint" style="background:var(--green-bg);border-color:var(--green-border);color:var(--green-text)"><b>${active.length}</b> paket booster sedang aktif mempromosikan tokomu.</div>`:''}
+    ${verifying.length?`<div class="hint" style="background:var(--amber-bg);border-color:var(--amber-border);color:var(--amber-text)"><b>${verifying.length}</b> pembayaran booster sedang diverifikasi oleh Admin.</div>`:''}
+    
+    <h3 style="margin:20px 0 12px">Pilihan Paket Booster</h3>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px">
       ${plans.map(p=>`<div class="form-card" style="display:flex;flex-direction:column;justify-content:space-between">
         <div>
           <h3 style="margin:0 0 6px">${esc(p.name)}</h3>
           <p class="small muted" style="margin:0 0 14px">${esc(p.description)}</p>
           <div style="font-size:22px;font-weight:800;color:var(--ink);margin-bottom:4px">${rupiah(p.price)}</div>
-          <div class="small muted">Durasi aktif: ${p.duration_days} hari</div>
+          <div class="small muted">Durasi: ${p.duration_days} hari promosi</div>
         </div>
         <div style="margin-top:16px">
-          <select id="bSvc-${p.id}" style="margin-bottom:10px">
-            <option value="">Promosikan seluruh toko</option>
-            ${services.map(s=>`<option value="${s.id}">${esc(s.title)}</option>`).join('')}
-          </select>
-          <button class="btn small" style="width:100%" onclick="guard(this,()=>buyBoost(${p.id}))">Beli Paket</button>
+          <button class="btn small" style="width:100%" onclick="openBoosterCheckout(${p.id}, '${esc(p.name)}', ${p.price}, ${p.duration_days})">Beli via QRIS</button>
         </div>
       </div>`).join('')}
     </div>
-    <h3 style="margin:32px 0 12px">Riwayat Booster</h3>
+
+    <!-- MODAL / FORM CHECKOUT QRIS BOOSTER -->
+    <div id="boosterPayCard" class="form-card" style="display:none;margin-top:24px;border:2px solid var(--ink);background:#ffffff">
+      <div class="row" style="justify-content:space-between;margin-bottom:12px">
+        <h3 id="bpTitle" style="margin:0">Pembayaran Booster</h3>
+        <button class="btn small ghost" onclick="$('#boosterPayCard').style.display='none'">Tutup</button>
+      </div>
+      <p class="small muted" style="margin:0 0 14px">Silakan transfer via QRIS platform di bawah ini, lalu unggah bukti transfer untuk diverifikasi Admin.</p>
+      
+      <div class="row" style="align-items:flex-start;gap:24px">
+        <div style="text-align:center;background:var(--border-light);padding:14px;border-radius:var(--radius-sm);border:1px solid var(--border)">
+          ${qrisUrl ? `<img src="${qrisUrl}" style="max-width:200px;display:block;margin:0 auto 8px;border-radius:4px;background:#fff;padding:4px">` : '<p class="small muted">QRIS Admin belum diunggah.</p>'}
+          <div class="small muted">Total yang harus ditransfer:</div>
+          <div id="bpPrice" style="font-size:20px;font-weight:800;color:var(--ink)">Rp 0</div>
+        </div>
+
+        <div style="flex:1;min-width:260px">
+          <input type="hidden" id="bpPlanId">
+          <label>Target Promosi Layanan</label>
+          <select id="bpServiceId" style="margin-bottom:12px">
+            <option value="">Promosikan seluruh toko (Semua Layanan)</option>
+            ${services.map(s=>`<option value="${s.id}">${esc(s.title)}</option>`).join('')}
+          </select>
+
+          <label>Unggah Foto Bukti Transfer (JPG/PNG)</label>
+          <div class="row">
+            <input type="file" id="bpFile" accept=".jpg,.jpeg,.png" style="flex:1" onchange="pickUpload('bpFile','bpProofUrl','bpMsg')">
+            <span class="small muted" id="bpMsg"></span>
+          </div>
+          <input type="hidden" id="bpProofUrl">
+
+          <button class="btn" style="width:100%;margin-top:16px" onclick="guard(this,submitBoosterPayment)">Kirim Bukti Pembayaran</button>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin:36px 0 12px">Riwayat Pembelian Booster</h3>
     <div class="form-card" style="padding:0;overflow:hidden">
-    ${mine.length?`<table><thead><tr><th>Paket</th><th>Mulai</th><th>Berakhir</th><th>Status</th></tr></thead><tbody>
-      ${mine.map(b=>`<tr><td><b>${esc(b.plan_name)}</b></td><td>${fmtDate(b.start_date)}</td><td>${fmtDate(b.end_date)}</td>
-        <td>${new Date(b.end_date)>new Date()?'<span class="badge open">Aktif</span>':'<span class="badge closed">Berakhir</span>'}</td></tr>`).join('')}
+    ${mine.length?`<table><thead><tr><th>Paket</th><th>Target</th><th>Nominal</th><th>Masa Aktif</th><th>Status</th></tr></thead><tbody>
+      ${mine.map(b=>{
+        let stBadge = '';
+        if (b.payment_status === 'verifying') {
+          stBadge = '<span class="badge boost"><span class="badge-dot" style="background:currentColor"></span>Menunggu Verifikasi Admin</span>';
+        } else if (b.payment_status === 'rejected') {
+          stBadge = '<span class="badge closed"><span class="badge-dot" style="background:currentColor"></span>Ditolak Admin</span>';
+        } else if (b.payment_status === 'paid') {
+          stBadge = new Date(b.end_date) > new Date() ? 
+            '<span class="badge open"><span class="badge-dot" style="background:currentColor"></span>Aktif</span>' : 
+            '<span class="badge closed">Berakhir</span>';
+        } else {
+          stBadge = `<span class="badge plan">${esc(b.payment_status)}</span>`;
+        }
+        return `<tr>
+          <td><b>${esc(b.plan_name)}</b></td>
+          <td>${esc(b.service_title || 'Seluruh Toko')}</td>
+          <td>${b.plan_price ? rupiah(b.plan_price) : '—'}</td>
+          <td class="small">${b.payment_status==='paid' ? fmtDate(b.start_date) + ' &rarr; ' + fmtDate(b.end_date) : 'Menunggu persetujuan'}</td>
+          <td>${stBadge}</td>
+        </tr>`;
+      }).join('')}
     </tbody></table>`:'<p class="muted" style="padding:16px">Belum pernah membeli booster.</p>'}
     </div>`;
 }
-async function buyBoost(planId){
-  const svcEl = $('#bSvc-'+planId);
-  const svc = svcEl ? svcEl.value : '';
-  const body = {booster_plan_id:planId};
-  if(svc) body.service_id = +svc;
-  if(!confirm('Beli booster ini? (Simulasi pembayaran)')) return;
-  await api('/api/booster/purchase',{method:'POST',body});
-  alert('Booster aktif! Layanan kamu sekarang diprioritaskan di pencarian.');
+
+function openBoosterCheckout(planId, name, price, days) {
+  $('#bpPlanId').value = planId;
+  $('#bpTitle').textContent = `Beli ${name} (${days} Hari)`;
+  $('#bpPrice').textContent = rupiah(price);
+  $('#bpProofUrl').value = '';
+  $('#bpMsg').textContent = '';
+  $('#boosterPayCard').style.display = 'block';
+  $('#boosterPayCard').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function submitBoosterPayment() {
+  const planId = $('#bpPlanId').value;
+  const serviceId = $('#bpServiceId').value;
+  const proofUrl = $('#bpProofUrl').value;
+
+  if (!proofUrl) {
+    throw new Error('Silakan pilih dan unggah foto bukti transfer pembayaran QRIS terlebih dahulu!');
+  }
+
+  const body = { booster_plan_id: +planId, payment_proof_url: proofUrl };
+  if (serviceId) body.service_id = +serviceId;
+
+  await api('/api/booster/purchase', { method: 'POST', body });
+  alert('Bukti pembayaran booster berhasil dikirim! Menunggu verifikasi admin untuk mengaktifkan.');
   renderBooster();
 }
 

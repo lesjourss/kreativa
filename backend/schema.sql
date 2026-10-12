@@ -114,7 +114,8 @@ CREATE TABLE IF NOT EXISTS booster_purchases (
   service_id INTEGER REFERENCES services(id) ON DELETE CASCADE,
   start_date TEXT NOT NULL,
   end_date TEXT NOT NULL,
-  payment_status TEXT NOT NULL DEFAULT 'paid' CHECK (payment_status IN ('pending','paid','failed'))
+  payment_proof_url TEXT NOT NULL DEFAULT '',
+  payment_status TEXT NOT NULL DEFAULT 'verifying' CHECK (payment_status IN ('unpaid','verifying','paid','rejected'))
 );
 
 CREATE TABLE IF NOT EXISTS deliveries (

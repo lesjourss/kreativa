@@ -129,7 +129,8 @@ CREATE TABLE IF NOT EXISTS booster_purchases (
   service_id INT NULL,
   start_date DATETIME NOT NULL,
   end_date DATETIME NOT NULL,
-  payment_status VARCHAR(20) NOT NULL DEFAULT 'paid' CHECK (payment_status IN ('pending','paid','failed')),
+  payment_proof_url VARCHAR(2000) NOT NULL DEFAULT '',
+  payment_status VARCHAR(20) NOT NULL DEFAULT 'verifying' CHECK (payment_status IN ('unpaid','verifying','paid','rejected')),
   FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (booster_plan_id) REFERENCES booster_plans(id),
   FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE

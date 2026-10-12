@@ -1108,11 +1108,18 @@ def booster_purchase():
     except (TypeError, ValueError):
         return jsonify({"error": "booster_plan_id tidak valid"}), 400
     service_id = data.get("service_id")
-    if service_id is not None:
+    if service_id is not None and service_id != "":
         try:
             service_id = int(service_id)
         except (TypeError, ValueError):
             return jsonify({"error": "service_id tidak valid"}), 400
+    else:
+        service_id = None
+
+    payment_proof_url = clean_url(data.get("payment_proof_url", ""))
+    if not payment_proof_url:
+        return jsonify({"error": "Bukti pembayaran QRIS (foto JPG/PNG) wajib diunggah"}), 400
+
     db = get_db()
     plan = db.execute("SELECT * FROM booster_plans WHERE id=%s", (plan_id,)).fetchone()
     if plan is None:
@@ -1123,17 +1130,39 @@ def booster_purchase():
             return jsonify({"error": "Jasa tidak ditemukan"}), 404
         if s["creator_id"] != g.user["id"] and g.user["role"] != "admin":
             return jsonify({"error": "Bukan jasa milikmu"}), 403
-    start = datetime.now()
-    end = start + timedelta(days=int(plan["duration_days"]))
-    start_s, end_s = start.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S")
-    cur = db.execute(
-        """INSERT INTO booster_purchases (creator_id, booster_plan_id, service_id, start_date, end_date, payment_status)
-           VALUES (%s,%s,%s,%s,%s,'paid')""",
-        (g.user["id"], plan_id, service_id, start_s, end_s),
-    )
+
+    now_utc = datetime.now(timezone.utc)
+    end_utc = now_utc + timedelta(days=int(plan["duration_days"]))
+    start_s, end_s = now_utc.strftime("%Y-%m-%d %H:%M:%S"), end_utc.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Pastikan kolom payment_proof_url ada pada tabel
+    try:
+        cur = db.execute(
+            """INSERT INTO booster_purchases (creator_id, booster_plan_id, service_id, start_date, end_date, payment_status, payment_proof_url)
+               VALUES (%s,%s,%s,%s,%s,'verifying',%s)""",
+            (g.user["id"], plan_id, service_id, start_s, end_s, payment_proof_url),
+        )
+    except Exception:
+        db.rollback()
+        try:
+            db.execute("ALTER TABLE booster_purchases ADD COLUMN IF NOT EXISTS payment_proof_url VARCHAR(2000) DEFAULT ''")
+            db.commit()
+        except Exception:
+            pass
+        cur = db.execute(
+            """INSERT INTO booster_purchases (creator_id, booster_plan_id, service_id, start_date, end_date, payment_status, payment_proof_url)
+               VALUES (%s,%s,%s,%s,%s,'verifying',%s)""",
+            (g.user["id"], plan_id, service_id, start_s, end_s, payment_proof_url),
+        )
+
     db.commit()
-    return jsonify({"id": cur.lastrowid, "payment": "mock-paid",
-                    "start_date": start.isoformat(), "end_date": end.isoformat()}), 201
+    return jsonify({
+        "id": cur.lastrowid,
+        "payment_status": "verifying",
+        "message": "Bukti pembayaran booster berhasil dikirim! Menunggu verifikasi admin.",
+        "start_date": now_utc.isoformat(),
+        "end_date": end_utc.isoformat()
+    }), 201
 
 
 @app.get("/api/booster/active")
@@ -1154,12 +1183,25 @@ def booster_active():
 @role_required("creator")
 def booster_mine():
     db = get_db()
-    rows = db.execute(
-        """SELECT bp.*, pl.name AS plan_name FROM booster_purchases bp
-           JOIN booster_plans pl ON pl.id=bp.booster_plan_id
-           WHERE bp.creator_id=%s ORDER BY bp.end_date DESC""",
-        (g.user["id"],),
-    ).fetchall()
+    try:
+        rows = db.execute(
+            """SELECT bp.*, pl.name AS plan_name, pl.price AS plan_price, s.title AS service_title FROM booster_purchases bp
+               JOIN booster_plans pl ON pl.id=bp.booster_plan_id
+               LEFT JOIN services s ON s.id=bp.service_id
+               WHERE bp.creator_id=%s ORDER BY bp.id DESC""",
+            (g.user["id"],),
+        ).fetchall()
+    except Exception:
+        db.rollback()
+        db.execute("ALTER TABLE booster_purchases ADD COLUMN IF NOT EXISTS payment_proof_url VARCHAR(2000) DEFAULT ''")
+        db.commit()
+        rows = db.execute(
+            """SELECT bp.*, pl.name AS plan_name, pl.price AS plan_price, s.title AS service_title FROM booster_purchases bp
+               JOIN booster_plans pl ON pl.id=bp.booster_plan_id
+               LEFT JOIN services s ON s.id=bp.service_id
+               WHERE bp.creator_id=%s ORDER BY bp.id DESC""",
+            (g.user["id"],),
+        ).fetchall()
     return jsonify([row_to_dict(r) for r in rows])
 
 
@@ -1257,6 +1299,82 @@ def verify_payment(oid):
     )
     db.commit()
     return jsonify({"ok": True, "payment_status": new_pay_status})
+
+
+# 6. API Admin: Daftar Pembelian Booster untuk Diverifikasi
+@app.get("/api/admin/boosters")
+@auth_required
+@role_required("admin")
+def list_admin_boosters():
+    db = get_db()
+    try:
+        rows = db.execute(
+            """SELECT bp.id, bp.creator_id, bp.booster_plan_id, bp.service_id, bp.start_date, bp.end_date,
+                      bp.payment_status, bp.payment_proof_url,
+                      u.name AS creator_name, u.email AS creator_email,
+                      pl.name AS plan_name, pl.price AS plan_price, pl.duration_days,
+                      s.title AS service_title
+               FROM booster_purchases bp
+               JOIN users u ON u.id = bp.creator_id
+               JOIN booster_plans pl ON pl.id = bp.booster_plan_id
+               LEFT JOIN services s ON s.id = bp.service_id
+               ORDER BY bp.id DESC"""
+        ).fetchall()
+    except Exception:
+        db.rollback()
+        db.execute("ALTER TABLE booster_purchases ADD COLUMN IF NOT EXISTS payment_proof_url VARCHAR(2000) DEFAULT ''")
+        db.commit()
+        rows = db.execute(
+            """SELECT bp.id, bp.creator_id, bp.booster_plan_id, bp.service_id, bp.start_date, bp.end_date,
+                      bp.payment_status, bp.payment_proof_url,
+                      u.name AS creator_name, u.email AS creator_email,
+                      pl.name AS plan_name, pl.price AS plan_price, pl.duration_days,
+                      s.title AS service_title
+               FROM booster_purchases bp
+               JOIN users u ON u.id = bp.creator_id
+               JOIN booster_plans pl ON pl.id = bp.booster_plan_id
+               LEFT JOIN services s ON s.id = bp.service_id
+               ORDER BY bp.id DESC"""
+        ).fetchall()
+    return jsonify([row_to_dict(r) for r in rows])
+
+
+# 7. API Admin: Setujui / Tolak Pembayaran Booster
+@app.patch("/api/admin/boosters/<int:bid>/verify-payment")
+@auth_required
+@role_required("admin")
+def verify_booster_payment(bid):
+    data = request.get_json(force=True, silent=True) or {}
+    action = data.get("action")  # 'approve' atau 'reject'
+    if action not in ("approve", "reject"):
+        return jsonify({"error": "Aksi harus approve atau reject"}), 400
+
+    db = get_db()
+    bp = db.execute(
+        """SELECT bp.*, pl.duration_days 
+           FROM booster_purchases bp 
+           JOIN booster_plans pl ON pl.id=bp.booster_plan_id 
+           WHERE bp.id=%s""", 
+        (bid,)
+    ).fetchone()
+    if bp is None:
+        return jsonify({"error": "Data booster tidak ditemukan"}), 404
+
+    if action == "approve":
+        now_utc = datetime.now(timezone.utc)
+        end_utc = now_utc + timedelta(days=int(bp["duration_days"]))
+        start_s, end_s = now_utc.strftime("%Y-%m-%d %H:%M:%S"), end_utc.strftime("%Y-%m-%d %H:%M:%S")
+        db.execute(
+            "UPDATE booster_purchases SET payment_status='paid', start_date=%s, end_date=%s WHERE id=%s",
+            (start_s, end_s, bid)
+        )
+    else:
+        db.execute(
+            "UPDATE booster_purchases SET payment_status='rejected' WHERE id=%s",
+            (bid,)
+        )
+    db.commit()
+    return jsonify({"ok": True, "action": action, "payment_status": "paid" if action == "approve" else "rejected"})
 
 
 # ---------- Upload gambar ----------
