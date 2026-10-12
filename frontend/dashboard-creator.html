@@ -239,6 +239,7 @@ async function renderBooster(){
             <input type="file" id="bpFile" accept=".jpg,.jpeg,.png" style="flex:1" onchange="pickUpload('bpFile','bpProofUrl','bpMsg')">
             <span class="small muted" id="bpMsg"></span>
           </div>
+          <img id="bpProofUrlPrev" class="prev" style="display:none;margin-top:8px;max-width:240px;border-radius:var(--radius-sm);border:1px solid var(--border)">
           <input type="hidden" id="bpProofUrl">
 
           <button class="btn" style="width:100%;margin-top:16px" onclick="guard(this,submitBoosterPayment)">Kirim Bukti Pembayaran</button>
@@ -279,6 +280,8 @@ function openBoosterCheckout(planId, name, price, days) {
   $('#bpTitle').textContent = `Beli ${name} (${days} Hari)`;
   $('#bpPrice').textContent = rupiah(price);
   $('#bpProofUrl').value = '';
+  const pv = $('#bpProofUrlPrev');
+  if (pv) { pv.src = ''; pv.style.display = 'none'; }
   $('#bpMsg').textContent = '';
   $('#boosterPayCard').style.display = 'block';
   $('#boosterPayCard').scrollIntoView({ behavior: 'smooth' });

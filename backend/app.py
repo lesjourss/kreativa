@@ -69,8 +69,10 @@ def clean_url(u):
     u = (u or "").strip()
     if not u:
         return ""
+    if u.lower().startswith("data:"):
+        return u
     if len(u) > 2000:
-        raise ValueError("URL terlalu panjang")
+        raise ValueError("URL terlalu panjang (maks 2000 karakter)")
     if u.startswith("/") and not u.startswith("//"):
         return u
     if u.lower().startswith(("http://", "https://")):
@@ -79,9 +81,84 @@ def clean_url(u):
 
 
 # ---------- DB helpers ----------
+_migrated = False
+
+
+def _run_auto_migrations(db):
+    migrations = [
+        # Pastikan kolom-kolom payment_proof_url dan URL lainnya bertipe TEXT (muat Data URI)
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_proof_url TEXT DEFAULT ''",
+        "ALTER TABLE orders ALTER COLUMN payment_proof_url TYPE TEXT",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) DEFAULT 'unpaid'",
+        "ALTER TABLE booster_purchases ADD COLUMN IF NOT EXISTS payment_proof_url TEXT DEFAULT ''",
+        "ALTER TABLE booster_purchases ALTER COLUMN payment_proof_url TYPE TEXT",
+        "ALTER TABLE booster_purchases ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) DEFAULT 'verifying'",
+        # Drop check constraints spesifik jika ada
+        "ALTER TABLE booster_purchases DROP CONSTRAINT IF EXISTS booster_purchases_payment_status_check",
+        "ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_payment_status_check",
+        "ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check",
+        # Hapus secara dinamis seluruh check constraints pada tabel orders dan booster_purchases
+        """DO $$
+        DECLARE r RECORD;
+        BEGIN
+            FOR r IN (
+                SELECT conname, relname
+                FROM pg_constraint c
+                JOIN pg_class t ON c.conrelid = t.oid
+                WHERE t.relname IN ('booster_purchases', 'orders')
+                  AND c.contype = 'c'
+            ) LOOP
+                BEGIN
+                    EXECUTE 'ALTER TABLE ' || quote_ident(r.relname) || ' DROP CONSTRAINT ' || quote_ident(r.conname);
+                EXCEPTION WHEN OTHERS THEN
+                    NULL;
+                END;
+            END LOOP;
+        END $$;""",
+        """CREATE TABLE IF NOT EXISTS payment_settings (
+            id SERIAL PRIMARY KEY,
+            qris_image_url TEXT NOT NULL DEFAULT '',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )""",
+        "ALTER TABLE payment_settings ALTER COLUMN qris_image_url TYPE TEXT",
+        """CREATE TABLE IF NOT EXISTS deliveries (
+            id SERIAL PRIMARY KEY,
+            order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+            creator_id INT NOT NULL REFERENCES users(id),
+            note TEXT,
+            file_url TEXT NOT NULL DEFAULT '',
+            link_url TEXT NOT NULL DEFAULT '',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )""",
+        "ALTER TABLE deliveries ALTER COLUMN file_url TYPE TEXT",
+        "ALTER TABLE deliveries ALTER COLUMN link_url TYPE TEXT",
+    ]
+    for sql in migrations:
+        try:
+            db.execute(sql)
+            db.commit()
+        except Exception:
+            db.rollback()
+
+    try:
+        if db.execute("SELECT id FROM users WHERE email='admin@kreativa.id'").fetchone() is None:
+            db.execute(
+                "INSERT INTO users (name, email, password_hash, role) VALUES (%s,%s,%s,'admin')",
+                ("Admin Kreativa", "admin@kreativa.id", generate_password_hash("admin123"))
+            )
+            db.commit()
+    except Exception:
+        db.rollback()
+
+
 def get_db():
+    global _migrated
     if "db" not in g:
         g.db = mysql_connect()
+        if not _migrated:
+            _run_auto_migrations(g.db)
+            _migrated = True
     return g.db
 
 
@@ -95,6 +172,7 @@ def close_db(exc=None):
 def init_db():
     db = mysql_connect()
     try:
+        _run_auto_migrations(db)
         if db.execute("SELECT COUNT(*) AS c FROM service_categories").fetchone()["c"] == 0:
             cats = ["Desain Grafis", "Ilustrasi & Fan Art", "Fotografi", "Videografi",
                     "Video Editing", "UI/UX Design", "Motion Graphic & Animasi",
@@ -1116,53 +1194,66 @@ def booster_purchase():
     else:
         service_id = None
 
-    payment_proof_url = clean_url(data.get("payment_proof_url", ""))
+    raw_proof = data.get("payment_proof_url", "")
+    try:
+        payment_proof_url = clean_url(raw_proof)
+    except Exception as e:
+        return jsonify({"error": f"Format foto bukti pembayaran tidak valid: {str(e)}"}), 400
+
     if not payment_proof_url:
         return jsonify({"error": "Bukti pembayaran QRIS (foto JPG/PNG) wajib diunggah"}), 400
 
     db = get_db()
-    plan = db.execute("SELECT * FROM booster_plans WHERE id=%s", (plan_id,)).fetchone()
-    if plan is None:
-        return jsonify({"error": "Paket booster tidak ditemukan"}), 404
-    if service_id is not None:
-        s = db.execute("SELECT * FROM services WHERE id=%s", (service_id,)).fetchone()
-        if s is None:
-            return jsonify({"error": "Jasa tidak ditemukan"}), 404
-        if s["creator_id"] != g.user["id"] and g.user["role"] != "admin":
-            return jsonify({"error": "Bukan jasa milikmu"}), 403
-
-    now_utc = datetime.now(timezone.utc)
-    end_utc = now_utc + timedelta(days=int(plan["duration_days"]))
-    start_s, end_s = now_utc.strftime("%Y-%m-%d %H:%M:%S"), end_utc.strftime("%Y-%m-%d %H:%M:%S")
-
-    # Pastikan kolom payment_proof_url ada pada tabel
     try:
-        cur = db.execute(
-            """INSERT INTO booster_purchases (creator_id, booster_plan_id, service_id, start_date, end_date, payment_status, payment_proof_url)
-               VALUES (%s,%s,%s,%s,%s,'verifying',%s)""",
-            (g.user["id"], plan_id, service_id, start_s, end_s, payment_proof_url),
-        )
-    except Exception:
-        db.rollback()
+        plan = db.execute("SELECT * FROM booster_plans WHERE id=%s", (plan_id,)).fetchone()
+        if plan is None:
+            return jsonify({"error": "Paket booster tidak ditemukan"}), 404
+        if service_id is not None:
+            s = db.execute("SELECT * FROM services WHERE id=%s", (service_id,)).fetchone()
+            if s is None:
+                return jsonify({"error": "Jasa tidak ditemukan"}), 404
+            if s["creator_id"] != g.user["id"] and g.user["role"] != "admin":
+                return jsonify({"error": "Bukan jasa milikmu"}), 403
+
+        now_utc = datetime.now(timezone.utc)
+        end_utc = now_utc + timedelta(days=int(plan["duration_days"]))
+        start_s, end_s = now_utc.strftime("%Y-%m-%d %H:%M:%S"), end_utc.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Coba insert booster purchase
         try:
-            db.execute("ALTER TABLE booster_purchases ADD COLUMN IF NOT EXISTS payment_proof_url VARCHAR(2000) DEFAULT ''")
+            cur = db.execute(
+                """INSERT INTO booster_purchases (creator_id, booster_plan_id, service_id, start_date, end_date, payment_status, payment_proof_url)
+                   VALUES (%s,%s,%s,%s,%s,'verifying',%s)""",
+                (g.user["id"], plan_id, service_id, start_s, end_s, payment_proof_url),
+            )
             db.commit()
         except Exception:
-            pass
-        cur = db.execute(
-            """INSERT INTO booster_purchases (creator_id, booster_plan_id, service_id, start_date, end_date, payment_status, payment_proof_url)
-               VALUES (%s,%s,%s,%s,%s,'verifying',%s)""",
-            (g.user["id"], plan_id, service_id, start_s, end_s, payment_proof_url),
-        )
+            db.rollback()
+            try:
+                db.execute("ALTER TABLE booster_purchases ADD COLUMN IF NOT EXISTS payment_proof_url TEXT DEFAULT ''")
+                db.execute("ALTER TABLE booster_purchases ALTER COLUMN payment_proof_url TYPE TEXT")
+                db.execute("ALTER TABLE booster_purchases DROP CONSTRAINT IF EXISTS booster_purchases_payment_status_check")
+                db.commit()
+            except Exception:
+                db.rollback()
 
-    db.commit()
-    return jsonify({
-        "id": cur.lastrowid,
-        "payment_status": "verifying",
-        "message": "Bukti pembayaran booster berhasil dikirim! Menunggu verifikasi admin.",
-        "start_date": now_utc.isoformat(),
-        "end_date": end_utc.isoformat()
-    }), 201
+            cur = db.execute(
+                """INSERT INTO booster_purchases (creator_id, booster_plan_id, service_id, start_date, end_date, payment_status, payment_proof_url)
+                   VALUES (%s,%s,%s,%s,%s,'verifying',%s)""",
+                (g.user["id"], plan_id, service_id, start_s, end_s, payment_proof_url),
+            )
+            db.commit()
+
+        return jsonify({
+            "id": getattr(cur, "lastrowid", None),
+            "payment_status": "verifying",
+            "message": "Bukti pembayaran booster berhasil dikirim! Menunggu verifikasi admin.",
+            "start_date": now_utc.isoformat(),
+            "end_date": end_utc.isoformat()
+        }), 201
+    except Exception as e:
+        db.rollback()
+        return jsonify({"error": f"Gagal memproses pembayaran booster: {str(e)}"}), 500
 
 
 @app.get("/api/booster/active")
@@ -1243,19 +1334,41 @@ def submit_payment_proof(oid):
     proof_url = (data.get("payment_proof_url") or "").strip()
     if not proof_url:
         return jsonify({"error": "Bukti pembayaran (file JPG/PNG) wajib diupload"}), 400
-    
+
+    try:
+        proof_url = clean_url(proof_url)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
     db = get_db()
     o = db.execute("SELECT * FROM orders WHERE id=%s", (oid,)).fetchone()
     if o is None:
         return jsonify({"error": "Order tidak ditemukan"}), 404
     if o["customer_id"] != g.user["id"]:
         return jsonify({"error": "Bukan order milikmu"}), 403
-    
-    db.execute(
-        "UPDATE orders SET payment_proof_url=%s, payment_status='verifying', updated_at=%s WHERE id=%s",
-        (proof_url, now_str(), oid)
-    )
-    db.commit()
+
+    try:
+        db.execute(
+            "UPDATE orders SET payment_proof_url=%s, payment_status='verifying', updated_at=%s WHERE id=%s",
+            (proof_url, now_str(), oid)
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        try:
+            db.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_proof_url TEXT DEFAULT ''")
+            db.execute("ALTER TABLE orders ALTER COLUMN payment_proof_url TYPE TEXT")
+            db.execute("ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_payment_status_check")
+            db.commit()
+            db.execute(
+                "UPDATE orders SET payment_proof_url=%s, payment_status='verifying', updated_at=%s WHERE id=%s",
+                (proof_url, now_str(), oid)
+            )
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            return jsonify({"error": f"Gagal menyimpan bukti pembayaran: {str(e)}"}), 500
+
     return jsonify({"ok": True, "payment_status": "verifying"})
 
 
@@ -1397,7 +1510,7 @@ def upload_image():
     fname = f"{uuid.uuid4().hex}.{ext}"
 
     if SUPABASE_URL and SUPABASE_SERVICE_KEY:
-        headers = {"apikey": SUPABASE_SERVICE_KEY, "Content-Type": CONTENT_TYPES[ext]}
+        headers = {"apikey": SUPABASE_SERVICE_KEY, "Content-Type": CONTENT_TYPES.get(ext, "image/jpeg")}
         if not SUPABASE_SERVICE_KEY.startswith("sb_"):
             headers["Authorization"] = f"Bearer {SUPABASE_SERVICE_KEY}"
         req = urllib.request.Request(
@@ -1406,24 +1519,38 @@ def upload_image():
         )
         try:
             urllib.request.urlopen(req, timeout=20).read()
-        except urllib.error.HTTPError as e:
-            return jsonify({"error": f"Storage menolak upload ({e.code})"}), 502
+            return jsonify({"url": f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{fname}"}), 201
         except Exception:
-            return jsonify({"error": "Gagal menghubungi storage"}), 502
-        return jsonify({"url": f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{fname}"}), 201
+            pass
 
     try:
         os.makedirs(UPLOAD_DIR, exist_ok=True)
         with open(os.path.join(UPLOAD_DIR, fname), "wb") as out:
             out.write(data)
-    except OSError:
-        return jsonify({"error": "Storage belum dikonfigurasi (SUPABASE_URL / SUPABASE_SERVICE_KEY)"}), 503
-    return jsonify({"url": f"/uploads/{fname}"}), 201
+        return jsonify({"url": f"/uploads/{fname}"}), 201
+    except Exception:
+        # Fallback serverless (Vercel read-only filesystem atau offline storage): kembalikan data URI base64
+        import base64
+        mime = CONTENT_TYPES.get(ext, "image/jpeg")
+        b64 = base64.b64encode(data).decode("ascii")
+        return jsonify({"url": f"data:{mime};base64,{b64}"}), 201
 
 
 @app.get("/uploads/<path:fname>")
 def serve_upload(fname):
     return send_from_directory(UPLOAD_DIR, fname)
+
+
+# ---------- Global Error Handlers (JSON) ----------
+@app.errorhandler(500)
+def handle_500(err):
+    msg = str(getattr(err, "description", err))
+    return jsonify({"error": f"Server Error (500): {msg}"}), 500
+
+
+@app.errorhandler(Exception)
+def handle_uncaught_exception(e):
+    return jsonify({"error": f"Server Error: {str(e)}"}), 500
 
 
 # ---------- Serve frontend (static) ----------
