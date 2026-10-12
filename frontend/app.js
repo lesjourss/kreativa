@@ -8,7 +8,7 @@ const fmtDate = (s) => String(s||'').slice(0,16);
 
 // Client API Helper
 async function api(path, {method='GET', body, token}={}) {
-  const t = token || localStorage.getItem('token');
+  const t = token || getToken();
   const res = await fetch(path, {
     method,
     headers: {'Content-Type':'application/json', ...(t?{Authorization:'Bearer '+t}:{})},
@@ -16,7 +16,9 @@ async function api(path, {method='GET', body, token}={}) {
   });
   const data = await res.json().catch(()=>({}));
   if (res.status===401 && t && !path.startsWith('/api/auth/')) {
-    localStorage.clear(); alert('Sesi habis, silakan login lagi.'); location.href='/auth.html';
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
+    alert('Sesi habis, silakan login lagi.'); location.href='/auth.html';
     throw new Error('Sesi habis');
   }
   if (!res.ok) throw new Error(data.error || `Request gagal (${res.status})`);
@@ -48,7 +50,7 @@ async function shrinkImage(file, maxSide=1600, quality=.85){
 async function uploadFile(file){
   file = await shrinkImage(file);
   const fd = new FormData(); fd.append('file', file);
-  const t = localStorage.getItem('token');
+  const t = getToken();
   const res = await fetch('/api/upload', {method:'POST', headers:t?{Authorization:'Bearer '+t}:{}, body:fd});
   const data = await res.json().catch(()=>({}));
   if(!res.ok) throw new Error(data.error || (res.status===413 ? 'File terlalu besar (maks 4MB)' : `Upload gagal (${res.status})`));
@@ -71,22 +73,53 @@ async function pickUpload(fileId, urlId, msgId){
   }
 }
 
-// Session Management
+// Session Management (Tab-Isolated)
+// Mengutamakan sessionStorage agar tiap tab browser terisolasi dan bisa login role berbeda (creator & customer) tanpa tabrakan.
+function getToken(){
+  let t = sessionStorage.getItem('token');
+  if(!t){
+    t = localStorage.getItem('token');
+    if(t){
+      sessionStorage.setItem('token', t);
+      const u = localStorage.getItem('user');
+      if(u) sessionStorage.setItem('user', u);
+    }
+  }
+  return t || '';
+}
+
 function currentUser(){
   try{
-    return JSON.parse(localStorage.getItem('user') || 'null');
+    let u = sessionStorage.getItem('user');
+    if(!u){
+      u = localStorage.getItem('user');
+      if(u){
+        sessionStorage.setItem('user', u);
+        const t = localStorage.getItem('token');
+        if(t) sessionStorage.setItem('token', t);
+      }
+    }
+    return JSON.parse(u || 'null');
   }catch{
     return null;
   }
 }
 
 function saveSession(d){
+  if(!d || !d.token) return;
+  // Simpan di tab aktif (terisolasi per tab)
+  sessionStorage.setItem('token', d.token);
+  sessionStorage.setItem('user', JSON.stringify(d.user));
+  // Simpan juga di localStorage sebagai default saat buka tab kosong baru
   localStorage.setItem('token', d.token);
   localStorage.setItem('user', JSON.stringify(d.user));
 }
 
 function logout(){
-  localStorage.clear();
+  sessionStorage.removeItem('token');
+  sessionStorage.removeItem('user');
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
   location.href='/';
 }
 

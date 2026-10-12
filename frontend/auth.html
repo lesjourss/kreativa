@@ -125,8 +125,14 @@ async function handleRegister(e) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  if (currentUser()) {
-    location.href = '/';
+  const u = currentUser();
+  if (u) {
+    const notice = document.createElement('div');
+    notice.style.cssText = 'margin-bottom:16px;padding:12px;background:var(--border-light);border-radius:var(--radius-sm);font-size:13px;line-height:1.5';
+    notice.innerHTML = `Tab ini sedang aktif: <b>${esc(u.name)}</b> (${esc(u.role)}).<br>
+      <a href="${u.role==='creator'?'/dashboard-creator.html':u.role==='admin'?'/dashboard-admin.html':'/'}">Buka Dashboard</a> atau masuk dengan akun lain di bawah:`;
+    const formCard = $('.form-card');
+    if (formCard) formCard.insertBefore(notice, formCard.firstChild);
   }
 });
 </script>

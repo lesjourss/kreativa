@@ -57,7 +57,7 @@ async function saveProfile(){
   const name=$('#nm').value.trim(), av=$('#av').value.trim();
   await api('/api/me',{method:'PATCH',body:{name,avatar_url:av}});
   if(me.role==='creator') await api('/api/creator/profile',{method:'PATCH',body:{avatar_url:av}});
-  saveSession({token:localStorage.getItem('token'),user:{...me,name,avatar_url:av}});
+  saveSession({token:getToken(),user:{...me,name,avatar_url:av}});
   alert('Data profil berhasil diperbarui!'); location.reload();
 }
 async function savePass(){ 
